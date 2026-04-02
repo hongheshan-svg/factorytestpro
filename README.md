@@ -1,6 +1,7 @@
 # Universal Test Framework
 
 Universal Test Framework is a Windows-only automated test platform for configuration-driven DUT testing.
+It is designed for high-throughput factory scenarios, supports parallel testing for 16 or more DUTs, and allows custom test content through configuration and plugins.
 
 ## Overview
 
@@ -12,10 +13,20 @@ Universal Test Framework is a Windows-only automated test platform for configura
 ## Key Capabilities
 
 - Configuration-driven test projects and DUT setup
+- Parallel orchestration for 16 or more DUTs in the same test session
 - Plugin-based step execution by step type and channel
+- Custom test content can be defined without changing core code, including commands, channels, validation rules, conditional execution, retry policies, and plugin-backed step types
 - Parallel DUT orchestration
 - Reporting and validation pipeline
 - Driver plugins for serial, telnet, SCPI, and ADB scenarios
+
+## Scalability And Customization
+
+- Multi-DUT execution is part of the core design, and the framework targets production stations that need to run more than 16 DUTs concurrently.
+- Test content is not limited to built-in templates. You can define device-specific or product-specific steps in configuration, route them to different channels, and extend execution behavior through plugins.
+- Supported customization includes step sequencing, expected-result matching, retry control, context variables, conditional execution, target device selection, and custom plugin step handlers.
+- For configuration details, see `config/unified-config.json` and `config/README.md`.
+- For plugin packaging and routing rules, see `plugins/README.md`.
 
 ## Project Structure
 
@@ -63,5 +74,5 @@ dotnet test tests/UTF.Core.Tests/UTF.Core.Tests.csproj --logger "console;verbosi
 
 ## Notes
 
-- This repository currently has no Git remote configured in the workspace clone.
-- If you want to publish it as a public GitHub repository, configure a remote and choose an OSS license before pushing.
+- The repository is published at `hongheshan-svg/factorytestpro` and the local `main` branch tracks `origin/main`.
+- If you plan to keep it public, the next practical repository-level improvement is to add an OSS license file.
