@@ -3,6 +3,8 @@
 Universal Test Framework is a Windows-only automated test platform for configuration-driven DUT testing.
 It is designed for high-throughput factory scenarios, supports parallel testing for 16 or more DUTs, and allows custom test content through configuration and plugins.
 
+Its goal is to help factories expand their automation testing capability, scale test coverage faster, and protect product quality with repeatable, configurable, and extensible test workflows.
+
 ## Overview
 
 - Platform: WPF on .NET 10 (`net10.0-windows`)
