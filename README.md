@@ -5,6 +5,9 @@ It is designed for high-throughput factory scenarios, supports parallel testing 
 
 Its goal is to help factories expand their automation testing capability, scale test coverage faster, and protect product quality with repeatable, configurable, and extensible test workflows.
 
+Factories that want to expand their automation testing capability are welcome to contact hongheshan@gmail.com.
+Contributions are also welcome from anyone who wants to help improve the codebase, extend test capabilities, or refine the platform for broader factory use.
+
 ## Overview
 
 - Platform: WPF on .NET 10 (`net10.0-windows`)
