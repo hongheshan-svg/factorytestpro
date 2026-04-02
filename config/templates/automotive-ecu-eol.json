@@ -1,0 +1,353 @@
+{
+  "ConfigurationInfo": {
+    "Name": "汽车电子 ECU 生产测试配置",
+    "Version": "2.0.0",
+    "CreatedDate": "2026-03-24T00:00:00Z",
+    "Description": "汽车电子控制单元（ECU）生产测试模板 — 含 CAN 通信、电源/电压、温度传感器、OBD 诊断",
+    "Author": "UTF System",
+    "Category": "automotive-electronics"
+  },
+
+  "SystemSettings": {
+    "LogLevel": "Debug",
+    "AutoSaveResults": true,
+    "ResultsPath": "./test-results/automotive",
+    "BackupEnabled": true,
+    "MaxLogFiles": 50,
+    "LogRotationSizeMB": 100,
+    "DefaultLanguage": "zh-CN",
+    "Theme": "Dark",
+    "AutoRefresh": true,
+    "RefreshInterval": 1000
+  },
+
+  "DUTConfiguration": {
+    "ProductInfo": {
+      "Name": "车载 ECU",
+      "Model": "ECU-ABS-3000",
+      "Icon": "🚗",
+      "Category": "汽车电子-ECU",
+      "ExpectedSoftwareVersion": "ECU_FW_V3.2.0"
+    },
+
+    "GlobalSettings": {
+      "DefaultMaxConcurrent": 4,
+      "EnablePreTestCheck": true,
+      "DefaultVoltage": 12.0,
+      "DefaultCurrent": 5.0,
+      "TestTimeout": 900,
+      "RetryCount": 1,
+      "RetryDelay": 5000
+    },
+
+    "MacRanges": [],
+
+    "Connections": {
+      "Primary": {
+        "Type": "Serial",
+        "BaudRate": 115200,
+        "DataBits": 8,
+        "StopBits": 1,
+        "Parity": "None"
+      },
+      "Secondary": {
+        "Type": "Network",
+        "TelnetPort": 6000,
+        "IPRange": "10.0.0.100-10.0.0.110"
+      }
+    },
+
+    "CommunicationEndpoints": {
+      "SerialPorts": [
+        "COM3", "COM4", "COM5", "COM6"
+      ],
+      "NetworkHosts": [
+        "10.0.0.100", "10.0.0.101", "10.0.0.102", "10.0.0.103"
+      ]
+    },
+
+    "NamingConfig": {
+      "Template": "ECU测试工位{Index}",
+      "IdTemplate": "ECU-{Index}"
+    }
+  },
+
+  "TestProjectConfiguration": {
+    "TestMode": {
+      "Id": "automotive_production",
+      "Name": "汽车电子 ECU 生产测试",
+      "Icon": "🏭",
+      "Description": "ECU 完整 EOL（End-of-Line）测试流程",
+      "DefaultTimeout": 900000,
+      "EnableParallel": true,
+      "MaxRetries": 1
+    },
+
+    "TestProject": {
+      "Id": "ecu_eol_test",
+      "Name": "ECU 下线测试",
+      "Description": "电源/CAN/传感器/诊断/标定全流程 EOL 测试",
+      "Enabled": true,
+      "Steps": [
+        {
+          "Id": "step_supply_voltage",
+          "Name": "供电电压检测",
+          "Description": "测量 ECU 输入电压（标称 12V）",
+          "Order": 1,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "MEASure:VOLTage:DC?",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 1000,
+          "Channel": "scpi",
+          "StoreResultAs": "supplyVoltage",
+          "Parameters": {
+            "InstrumentAddress": "10.0.1.50:5025"
+          },
+          "ValidationRules": {
+            "NumericRange": { "Min": 11.0, "Max": 14.5 }
+          }
+        },
+        {
+          "Id": "step_supply_current",
+          "Name": "静态电流检测",
+          "Description": "测量 ECU 静态电流消耗",
+          "Order": 2,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "MEASure:CURRent:DC?",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 2000,
+          "Channel": "scpi",
+          "StoreResultAs": "staticCurrent",
+          "Parameters": {
+            "InstrumentAddress": "10.0.1.50:5025"
+          },
+          "ValidationRules": {
+            "NumericRange": { "Min": 0.01, "Max": 0.5 }
+          }
+        },
+        {
+          "Id": "step_firmware_check",
+          "Name": "固件版本检查",
+          "Description": "通过调试串口读取 ECU 固件版本",
+          "Order": 3,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "diag read_fw_version",
+          "Expected": "contains:ECU_FW_V3.2",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "StoreResultAs": "ecuFirmware"
+        },
+        {
+          "Id": "step_hw_revision",
+          "Name": "硬件版本检查",
+          "Description": "读取 ECU 硬件版本号",
+          "Order": 4,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "diag read_hw_version",
+          "Expected": "regex:HW_V\\d+\\.\\d+",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "StoreResultAs": "hwRevision"
+        },
+        {
+          "Id": "step_can_init",
+          "Name": "CAN 总线初始化",
+          "Description": "初始化 CAN 通信接口（500kbps）",
+          "Order": 5,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "can_init 500000",
+          "Expected": "contains:CAN initialized",
+          "Timeout": 5000,
+          "Delay": 1000,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_can_selftest",
+          "Name": "CAN 回环自测",
+          "Description": "CAN 控制器内部回环测试",
+          "Order": 6,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "can_selftest loopback",
+          "Expected": "contains:PASS",
+          "Timeout": 10000,
+          "Delay": 500,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_can_send_receive",
+          "Name": "CAN 收发测试",
+          "Description": "发送 CAN 报文并验证回复（ID=0x7DF, UDS 请求）",
+          "Order": 7,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "can_uds_request 7DF 02 01 00",
+          "Expected": "contains:positive response",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "StoreResultAs": "canResponse"
+        },
+        {
+          "Id": "step_temp_sensor",
+          "Name": "温度传感器校验",
+          "Description": "读取板载温度传感器值（环境温度应在 15-40°C）",
+          "Order": 8,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "sensor read_temp",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "StoreResultAs": "boardTemp",
+          "ValidationRules": {
+            "NumericRange": { "Min": 15.0, "Max": 40.0 }
+          }
+        },
+        {
+          "Id": "step_acc_sensor",
+          "Name": "加速度传感器校验",
+          "Description": "读取加速度传感器静态 Z 轴值（应接近 1g）",
+          "Order": 9,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "sensor read_accel z",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "StoreResultAs": "accelZ",
+          "ValidationRules": {
+            "NumericRange": { "Min": 0.85, "Max": 1.15 }
+          }
+        },
+        {
+          "Id": "step_obd_dtc_clear",
+          "Name": "OBD 故障码清除",
+          "Description": "清除所有存储的故障码（DTC）",
+          "Order": 10,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "can_uds_request 7DF 01 04",
+          "Expected": "contains:cleared",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_obd_dtc_read",
+          "Name": "OBD 故障码读取验证",
+          "Description": "确认无残留 DTC",
+          "Order": 11,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "can_uds_request 7DF 01 03",
+          "Expected": "contains:no DTC",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "ValidationRules": {
+            "MustNotContainAny": ["P0", "P1", "P2", "C0", "U0"]
+          }
+        },
+        {
+          "Id": "step_eeprom_test",
+          "Name": "EEPROM 读写测试",
+          "Description": "写入校验数据并回读验证",
+          "Order": 12,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "eeprom_test pattern 0xA5",
+          "Expected": "contains:verify pass",
+          "Timeout": 10000,
+          "Delay": 500,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_write_vin",
+          "Name": "写入 VIN 标定数据",
+          "Description": "写入车辆识别码（VIN）到 ECU",
+          "Order": 13,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "calibration write_vin {{vinCode}}",
+          "Expected": "contains:write ok",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_sleep_current",
+          "Name": "休眠电流测量",
+          "Description": "ECU 进入休眠后测量漏电流",
+          "Order": 14,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "power_mode sleep",
+          "Expected": "contains:sleep mode",
+          "Timeout": 5000,
+          "Delay": 5000,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_sleep_current_measure",
+          "Name": "休眠电流值读取",
+          "Description": "测量休眠状态电流（应 < 1mA）",
+          "Order": 15,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "MEASure:CURRent:DC?",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 3000,
+          "Channel": "scpi",
+          "Parameters": {
+            "InstrumentAddress": "10.0.1.50:5025"
+          },
+          "ValidationRules": {
+            "NumericRange": { "Min": 0.0, "Max": 0.001 }
+          }
+        },
+        {
+          "Id": "step_wakeup_test",
+          "Name": "唤醒测试",
+          "Description": "发送 CAN 唤醒帧验证 ECU 正常唤醒",
+          "Order": 16,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "power_mode wakeup_can",
+          "Expected": "contains:awake",
+          "Timeout": 10000,
+          "Delay": 2000,
+          "Channel": "Serial"
+        }
+      ]
+    }
+  }
+}

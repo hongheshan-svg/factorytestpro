@@ -1,0 +1,21 @@
+{
+  "pluginId": "utf.executor.cmd",
+  "name": "UTF Cmd Executor",
+  "version": "1.0.0",
+  "pluginApiVersion": "1.0",
+  "entryAssembly": "UTF.Plugins.Example.dll",
+  "entryType": "UTF.Plugins.Example.CmdStepExecutorPlugin",
+  "supportedStepTypes": [
+    "custom",
+    "command"
+  ],
+  "supportedChannels": [
+    "cmd",
+    "command",
+    "powershell",
+    "ps"
+  ],
+  "priority": 100,
+  "publisher": "UTF",
+  "frameworkVersion": "net10.0"
+}

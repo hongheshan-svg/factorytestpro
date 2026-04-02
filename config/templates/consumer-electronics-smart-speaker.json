@@ -1,0 +1,342 @@
+{
+  "ConfigurationInfo": {
+    "Name": "智能音箱生产测试配置",
+    "Version": "2.0.0",
+    "CreatedDate": "2026-03-24T00:00:00Z",
+    "Description": "智能音箱/智能家居设备完整生产测试模板 — 含 WiFi、蓝牙、音频、麦克风、按键、OTA",
+    "Author": "UTF System",
+    "Category": "consumer-electronics"
+  },
+
+  "SystemSettings": {
+    "LogLevel": "Info",
+    "AutoSaveResults": true,
+    "ResultsPath": "./test-results",
+    "BackupEnabled": true,
+    "MaxLogFiles": 30,
+    "LogRotationSizeMB": 50,
+    "DefaultLanguage": "zh-CN",
+    "Theme": "Light",
+    "AutoRefresh": true,
+    "RefreshInterval": 2000
+  },
+
+  "DUTConfiguration": {
+    "ProductInfo": {
+      "Name": "智能音箱",
+      "Model": "SmartSpeaker-Pro",
+      "Icon": "🔊",
+      "Category": "消费电子-智能家居",
+      "ExpectedSoftwareVersion": "V2.3.1"
+    },
+
+    "GlobalSettings": {
+      "DefaultMaxConcurrent": 8,
+      "EnablePreTestCheck": true,
+      "DefaultVoltage": 5.0,
+      "DefaultCurrent": 2.0,
+      "TestTimeout": 600,
+      "RetryCount": 2,
+      "RetryDelay": 3000
+    },
+
+    "MacRanges": [
+      { "start": "AA:BB:CC:00:00:01", "end": "AA:BB:CC:00:FF:FF" }
+    ],
+
+    "Connections": {
+      "Primary": {
+        "Type": "Serial",
+        "BaudRate": 115200,
+        "DataBits": 8,
+        "StopBits": 1,
+        "Parity": "None"
+      },
+      "Secondary": {
+        "Type": "Network",
+        "TelnetPort": 23,
+        "IPRange": "192.168.10.100-192.168.10.120"
+      }
+    },
+
+    "CommunicationEndpoints": {
+      "SerialPorts": [
+        "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "COM10"
+      ],
+      "NetworkHosts": [
+        "192.168.10.100", "192.168.10.101", "192.168.10.102", "192.168.10.103",
+        "192.168.10.104", "192.168.10.105", "192.168.10.106", "192.168.10.107"
+      ]
+    },
+
+    "NamingConfig": {
+      "Template": "{TypeName}测试工位{Index}",
+      "IdTemplate": "DUT-{Index}"
+    }
+  },
+
+  "TestProjectConfiguration": {
+    "TestMode": {
+      "Id": "production",
+      "Name": "智能音箱生产测试",
+      "Icon": "🏭",
+      "Description": "智能音箱完整生产线测试流程",
+      "DefaultTimeout": 600000,
+      "EnableParallel": true,
+      "MaxRetries": 2
+    },
+
+    "TestProject": {
+      "Id": "smart_speaker_production",
+      "Name": "智能音箱生产测试",
+      "Description": "WiFi/BT/音频/麦克风/按键/OTA 全流程",
+      "Enabled": true,
+      "Steps": [
+        {
+          "Id": "step_power_on",
+          "Name": "上电检测",
+          "Description": "检测设备上电电流是否在正常范围",
+          "Order": 1,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "instrument",
+          "Command": "MEASure:CURRent:DC?",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 2000,
+          "Channel": "scpi",
+          "StoreResultAs": "powerOnCurrent",
+          "Parameters": {
+            "InstrumentAddress": "192.168.1.200:5025"
+          },
+          "ValidationRules": {
+            "NumericRange": { "Min": 0.1, "Max": 2.5 }
+          }
+        },
+        {
+          "Id": "step_firmware_version",
+          "Name": "固件版本检查",
+          "Description": "读取并验证设备固件版本",
+          "Order": 2,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "get_version",
+          "Expected": "contains:V2.3",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "StoreResultAs": "firmwareVersion"
+        },
+        {
+          "Id": "step_mac_check",
+          "Name": "WiFi MAC 地址检查",
+          "Description": "验证 WiFi MAC 地址在允许范围内",
+          "Order": 3,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "get_wifi_mac",
+          "Expected": "contains:AA:BB:CC",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "StoreResultAs": "wifiMac"
+        },
+        {
+          "Id": "step_bt_mac_check",
+          "Name": "蓝牙 MAC 地址检查",
+          "Description": "验证蓝牙 MAC 地址",
+          "Order": 4,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "get_bt_mac",
+          "Expected": "regex:[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "StoreResultAs": "btMac"
+        },
+        {
+          "Id": "step_wifi_connect",
+          "Name": "WiFi 连接测试",
+          "Description": "连接指定 AP 并验证 IP 获取",
+          "Order": 5,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "wifi_connect TestAP_Factory TestPassword123",
+          "Expected": "contains:connected",
+          "Timeout": 15000,
+          "Delay": 1000,
+          "Channel": "Serial",
+          "RetryCount": 2
+        },
+        {
+          "Id": "step_wifi_ping",
+          "Name": "WiFi 网络通信验证",
+          "Description": "通过 WiFi 验证网络通信能力",
+          "Order": 6,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "ping 8.8.8.8 -c 3",
+          "Expected": "contains:bytes from",
+          "Timeout": 10000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "ConditionExpression": "exists:wifiMac"
+        },
+        {
+          "Id": "step_bt_scan",
+          "Name": "蓝牙扫描测试",
+          "Description": "扫描蓝牙设备验证蓝牙模块正常",
+          "Order": 7,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "bt_scan 5",
+          "Expected": "contains:scan complete",
+          "Timeout": 10000,
+          "Delay": 500,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_speaker_test",
+          "Name": "扬声器音频测试",
+          "Description": "播放 1kHz 正弦波并用音频分析仪测量 THD",
+          "Order": 8,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "audio_play_tone 1000 3",
+          "Expected": "contains:play complete",
+          "Timeout": 10000,
+          "Delay": 500,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_speaker_thd",
+          "Name": "扬声器 THD 测量",
+          "Description": "读取音频分析仪的 THD 测量结果",
+          "Order": 9,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "MEASure:DISTortion?",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 1000,
+          "Channel": "scpi",
+          "TargetDeviceId": "audio_analyzer",
+          "Parameters": {
+            "InstrumentAddress": "192.168.1.201:5025"
+          },
+          "ValidationRules": {
+            "NumericRange": { "Min": 0.0, "Max": 1.0 }
+          }
+        },
+        {
+          "Id": "step_mic_test",
+          "Name": "麦克风录音测试",
+          "Description": "录制 3 秒音频并检测音量级别",
+          "Order": 10,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "mic_record 3",
+          "Expected": "contains:record complete",
+          "Timeout": 10000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "StoreResultAs": "micResult",
+          "ValidationRules": {
+            "MustContainAll": ["record complete", "level"],
+            "MustNotContainAny": ["error", "no device"]
+          }
+        },
+        {
+          "Id": "step_button_test",
+          "Name": "按键功能测试",
+          "Description": "依次测试各物理按键",
+          "Order": 11,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "factory_key_test",
+          "Expected": "contains:all keys pass",
+          "Timeout": 30000,
+          "Delay": 1000,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_led_test",
+          "Name": "LED 灯效测试",
+          "Description": "测试 LED 灯带各颜色显示",
+          "Order": 12,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "led_test all",
+          "Expected": "contains:led pass",
+          "Timeout": 10000,
+          "Delay": 500,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_power_consumption",
+          "Name": "待机功耗测量",
+          "Description": "测量设备待机状态功耗",
+          "Order": 13,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "MEASure:POWer:DC?",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 3000,
+          "Channel": "scpi",
+          "Parameters": {
+            "InstrumentAddress": "192.168.1.200:5025"
+          },
+          "ValidationRules": {
+            "NumericRange": { "Min": 0.0, "Max": 3.0 }
+          }
+        },
+        {
+          "Id": "step_write_sn",
+          "Name": "写入产品序列号",
+          "Description": "写入唯一产品序列号",
+          "Order": 14,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "write_sn {{serialNumber}}",
+          "Expected": "contains:write ok",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_final_check",
+          "Name": "整机自检",
+          "Description": "执行设备自检，确认所有模块正常",
+          "Order": 15,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "self_test",
+          "Expected": "contains:all pass",
+          "Timeout": 30000,
+          "Delay": 1000,
+          "Channel": "Serial",
+          "ValidationRules": {
+            "MustContainAll": ["wifi:pass", "bt:pass", "audio:pass", "mic:pass"],
+            "MustNotContainAny": ["fail", "error"]
+          }
+        }
+      ]
+    }
+  }
+}

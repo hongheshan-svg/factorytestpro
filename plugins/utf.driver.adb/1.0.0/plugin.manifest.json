@@ -1,0 +1,16 @@
+{
+  "pluginId": "utf.driver.adb",
+  "name": "UTF ADB Driver",
+  "version": "1.0.0",
+  "pluginApiVersion": "1.0",
+  "entryAssembly": "UTF.Plugins.Drivers.dll",
+  "entryType": "UTF.Plugins.Drivers.AdbDriverPlugin",
+  "supportedStepTypes": ["adb", "android", "shell"],
+  "supportedChannels": ["adb", "android", "usb"],
+  "priority": 10,
+  "publisher": "UTF",
+  "frameworkVersion": "net10.0",
+  "settings": {
+    "AdbPath": "adb"
+  }
+}

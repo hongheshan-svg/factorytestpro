@@ -1,0 +1,182 @@
+{
+  "LanguageInfo": {
+    "Code": "zh-CN",
+    "Name": "Chinese",
+    "NativeName": "中文",
+    "Flag": "🇨🇳",
+    "IsDefault": true
+  },
+  "Translations": {
+    "Login": {
+      "Title": "用户登录",
+      "Username": "用户名",
+      "Password": "密码",
+      "RememberMe": "记住我",
+      "LoginButton": "🚀 登录",
+      "CancelButton": "❌ 取消",
+      "Language": "语言",
+      "DefaultAccount": "💡 默认账号信息",
+      "DefaultUsername": "用户名: admin",
+      "DefaultPassword": "密码: admin123",
+      "DefaultRole": "角色: 超级管理员"
+    },
+    "Main": {
+      "Title": "通用自动化测试平台 - Universal Test Framework",
+      "StartTest": "▶️ 开始测试",
+      "PauseTest": "⏸️ 暂停测试",
+      "StopTest": "⏹️ 停止测试",
+      "CurrentStatus": "当前状态:",
+      "SystemReady": "系统就绪",
+      "User": "用户:",
+      "Station": "站台:",
+      "NotLoggedIn": "未登录",
+      "DUTStatistics": "📊 DUT测试统计",
+      "TotalDUT": "总DUT",
+      "Running": "测试中",
+      "Waiting": "等待中",
+      "Completed": "已完成",
+      "Failed": "失败",
+      "PassRate": "通过率",
+      "DUTMonitor": "🎛️ DUT监控台",
+      "UseToolbar": "使用上方工具栏进行测试控制"
+    },
+    "Menu": {
+      "Configuration": "配置(_C)",
+      "ImportConfig": "导入配置(_I)",
+      "ExportConfig": "导出配置(_E)",
+      "ConfigurationManagement": "配置管理(_M)",
+      "SystemConfig": "系统配置(_S)",
+      "Exit": "退出(_X)",
+      "Help": "帮助(_H)",
+      "UserManual": "用户手册(_M)",
+      "About": "关于(_A)",
+      "Language": "语言(_L)"
+    },
+    "Common": {
+      "OK": "确定",
+      "Cancel": "❌ 取消",
+      "Yes": "是",
+      "No": "否",
+      "Error": "错误",
+      "Warning": "警告",
+      "Information": "信息",
+      "Success": "成功",
+      "Confirm": "确认",
+      "Close": "🚪 关闭",
+      "Save": "💾 保存",
+      "SaveAll": "💾 保存全部",
+      "Load": "加载",
+      "Delete": "删除",
+      "Edit": "编辑",
+      "Add": "添加",
+      "Remove": "移除",
+      "System": "系统"
+    },
+    "Config": {
+      "LanguageChanged": "语言设置已更改，界面已刷新",
+      "Success": "设置成功",
+      "Saved": "已保存",
+      "SaveSuccess": "保存成功",
+      "AllSaved": "所有配置已保存"
+    },
+    "Permission": {
+      "Insufficient": "权限不足",
+      "NoTestPlanCreate": "您没有创建测试计划的权限",
+      "NoTestPlanEdit": "您没有编辑测试计划的权限",
+      "NoTestPlanOpen": "您没有打开测试计划的权限",
+      "NoTestPlanSave": "您没有保存测试计划的权限",
+      "NoSystemConfig": "您没有系统配置权限",
+      "NoDeviceDiscovery": "您没有设备扫描权限",
+      "NoDeviceCalibration": "您没有设备校准权限",
+      "NoDeviceManagement": "您没有设备管理权限",
+      "NoDataView": "您没有数据查看权限",
+      "NoReportGeneration": "您没有报告生成权限",
+      "NoDataExport": "您没有数据导出权限",
+      "NoLogView": "您没有日志查看权限",
+      "NoTestExecution": "您没有测试执行权限"
+    },
+    "File": {
+      "OpenTestPlan": "打开测试计划",
+      "SaveTestPlan": "保存测试计划",
+      "ImportConfig": "导入系统配置",
+      "ExportConfig": "导出系统配置",
+      "TestPlanFiles": "测试计划文件 (*.json)|*.json|所有文件 (*.*)|*.*",
+      "ConfigFiles": "配置文件 (*.json)|*.json|XML配置 (*.xml)|*.xml|所有文件 (*.*)|*.*",
+      "ReportFiles": "报告文件 (*.pdf)|*.pdf|JSON报告 (*.json)|*.json|所有文件 (*.*)|*.*",
+      "DataFiles": "数据文件 (*.csv)|*.csv|Excel文件 (*.xlsx)|*.xlsx|所有文件 (*.*)|*.*",
+      "LoadSuccess": "加载成功",
+      "SaveSuccess": "保存成功",
+      "ImportSuccess": "导入成功",
+      "ExportSuccess": "导出成功"
+    },
+    "Device": {
+      "Scanning": "设备扫描中...",
+      "ScanComplete": "设备扫描完成",
+      "ScanFailed": "设备扫描失败",
+      "DevicesFound": "发现 {0} 个设备",
+      "NoDevicesFound": "未发现任何设备",
+      "ConnectFailed": "连接设备失败",
+      "ConnectSuccess": "成功连接到设备",
+      "Connecting": "连接设备中...",
+      "Connected": "已连接",
+      "Calibration": "设备校准",
+      "CalibrationInProgress": "设备校准功能正在执行中...",
+      "CalibrationCompleted": "设备校准已完成",
+      "ConnectingAll": "连接所有设备中...",
+      "ConnectedCount": "成功连接 {0} 个设备",
+      "ConnectResult": "连接结果"
+    },
+    "Test": {
+      "BatchTest": "批量测试",
+      "BatchTestConfirm": "确定要启动所有DUT的批量测试吗？",
+      "BatchTestStarted": "批量测试已启动"
+    },
+    "Data": {
+      "TestHistory": "测试历史",
+      "TestHistoryWindow": "测试历史窗口功能正在开发中...",
+      "TestHistoryOpened": "测试历史窗口已打开",
+      "ExportData": "导出数据",
+      "Export": "数据导出",
+      "ExportSuccess": "数据导出成功"
+    },
+    "Report": {
+      "Generate": "生成报告",
+      "SaveReport": "保存报告",
+      "GenerateSuccess": "报告生成成功"
+    },
+    "System": {
+      "Config": "系统配置",
+      "ConfigWindow": "系统配置窗口功能正在开发中...",
+      "ConfigOpened": "系统配置窗口已打开",
+      "Logs": "系统日志",
+      "LogsWindow": "系统日志窗口功能正在开发中...",
+      "LogsOpened": "系统日志窗口已打开"
+    },
+    "Error": {
+      "OpenTestPlanEditor": "打开测试计划编辑器失败",
+      "LoadTestPlan": "加载测试计划失败",
+      "SaveTestPlan": "保存测试计划失败",
+      "ImportConfig": "导入配置失败",
+      "ExportConfig": "导出配置失败",
+      "DeviceScan": "设备扫描失败",
+      "DeviceCalibration": "设备校准失败",
+      "ConnectAllDevices": "连接所有设备失败",
+      "BatchTest": "批量测试失败",
+      "ViewTestHistory": "查看测试历史失败",
+      "GenerateReport": "生成报告失败",
+      "ExportData": "导出数据失败",
+      "SystemConfig": "系统配置失败",
+      "SystemLogs": "系统日志失败"
+    },
+    "DUT": {
+      "ViewLog": "📝 查看完整日志",
+      "ViewDetails": "📊 详细信息",
+      "PauseResume": "⏸️ 暂停/恢复",
+      "Retest": "🔧 重新测试"
+    },
+    "Exit": {
+      "Confirm": "确定要退出系统吗？",
+      "ConfirmTitle": "确认退出"
+    }
+  }
+}

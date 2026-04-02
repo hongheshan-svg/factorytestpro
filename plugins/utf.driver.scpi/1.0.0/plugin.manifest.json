@@ -1,0 +1,18 @@
+{
+  "pluginId": "utf.driver.scpi",
+  "name": "UTF SCPI Instrument Driver",
+  "version": "1.0.0",
+  "pluginApiVersion": "1.0",
+  "entryAssembly": "UTF.Plugins.Drivers.dll",
+  "entryType": "UTF.Plugins.Drivers.ScpiDriverPlugin",
+  "supportedStepTypes": ["instrument", "scpi", "gpib", "measure"],
+  "supportedChannels": ["scpi", "instrument", "gpib", "lxi"],
+  "priority": 10,
+  "publisher": "UTF",
+  "frameworkVersion": "net10.0",
+  "settings": {
+    "Port": "5025",
+    "ReadTimeoutMs": "5000",
+    "LineEnding": "\\n"
+  }
+}

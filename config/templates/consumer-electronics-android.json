@@ -1,0 +1,319 @@
+{
+  "ConfigurationInfo": {
+    "Name": "Android 设备 ADB 测试配置",
+    "Version": "2.0.0",
+    "CreatedDate": "2026-03-24T00:00:00Z",
+    "Description": "Android 智能终端 ADB 测试模板 — 含系统信息、存储、网络、屏幕、传感器、APK 安装",
+    "Author": "UTF System",
+    "Category": "consumer-electronics-android"
+  },
+
+  "SystemSettings": {
+    "LogLevel": "Info",
+    "AutoSaveResults": true,
+    "ResultsPath": "./test-results/android",
+    "BackupEnabled": true,
+    "MaxLogFiles": 20,
+    "LogRotationSizeMB": 50,
+    "DefaultLanguage": "zh-CN",
+    "Theme": "Light",
+    "AutoRefresh": true,
+    "RefreshInterval": 2000
+  },
+
+  "DUTConfiguration": {
+    "ProductInfo": {
+      "Name": "智能终端",
+      "Model": "Tablet-X10",
+      "Icon": "📱",
+      "Category": "消费电子-Android终端",
+      "ExpectedSoftwareVersion": "Android 14"
+    },
+
+    "GlobalSettings": {
+      "DefaultMaxConcurrent": 8,
+      "EnablePreTestCheck": true,
+      "DefaultVoltage": 5.0,
+      "DefaultCurrent": 3.0,
+      "TestTimeout": 600,
+      "RetryCount": 2,
+      "RetryDelay": 3000
+    },
+
+    "MacRanges": [],
+
+    "Connections": {
+      "Primary": {
+        "Type": "ADB",
+        "Protocol": "USB"
+      }
+    },
+
+    "CommunicationEndpoints": {
+      "AdbDevices": [
+        "device_serial_1", "device_serial_2", "device_serial_3", "device_serial_4",
+        "device_serial_5", "device_serial_6", "device_serial_7", "device_serial_8"
+      ]
+    },
+
+    "NamingConfig": {
+      "Template": "Android工位{Index}",
+      "IdTemplate": "ADB-{Index}"
+    }
+  },
+
+  "TestProjectConfiguration": {
+    "TestMode": {
+      "Id": "android_production",
+      "Name": "Android 设备生产测试",
+      "Icon": "🏭",
+      "Description": "Android 智能终端完整生产测试",
+      "DefaultTimeout": 600000,
+      "EnableParallel": true,
+      "MaxRetries": 1
+    },
+
+    "TestProject": {
+      "Id": "android_eol",
+      "Name": "Android 终端下线测试",
+      "Description": "系统/存储/网络/显示/传感器/APK 全流程",
+      "Enabled": true,
+      "Steps": [
+        {
+          "Id": "step_device_online",
+          "Name": "设备在线检测",
+          "Description": "确认 ADB 设备已连接且在线",
+          "Order": 1,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "adb get-state",
+          "Expected": "contains:device",
+          "Timeout": 10000,
+          "Delay": 1000,
+          "Channel": "adb",
+          "Parameters": {
+            "DeviceSerial": "{{deviceSerial}}"
+          }
+        },
+        {
+          "Id": "step_android_version",
+          "Name": "Android 版本检查",
+          "Description": "验证 Android SDK 版本",
+          "Order": 2,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "getprop ro.build.version.release",
+          "Expected": "contains:14",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "adb",
+          "StoreResultAs": "androidVersion"
+        },
+        {
+          "Id": "step_build_fingerprint",
+          "Name": "Build 指纹检查",
+          "Description": "验证固件 Build 信息",
+          "Order": 3,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "getprop ro.build.fingerprint",
+          "Expected": "regex:.*release-keys$",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "adb",
+          "StoreResultAs": "buildFingerprint"
+        },
+        {
+          "Id": "step_serial_number",
+          "Name": "序列号读取",
+          "Description": "读取设备序列号",
+          "Order": 4,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "getprop ro.serialno",
+          "Expected": "regex:.{8,}",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "adb",
+          "StoreResultAs": "deviceSN"
+        },
+        {
+          "Id": "step_storage_check",
+          "Name": "存储容量检查",
+          "Description": "检查内部存储空间",
+          "Order": 5,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "df /data | tail -1",
+          "Expected": "contains:/data",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "adb",
+          "StoreResultAs": "storageInfo"
+        },
+        {
+          "Id": "step_memory_check",
+          "Name": "内存容量检查",
+          "Description": "检查 RAM 总容量",
+          "Order": 6,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "cat /proc/meminfo | head -1",
+          "Expected": "contains:MemTotal",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "adb",
+          "StoreResultAs": "memInfo"
+        },
+        {
+          "Id": "step_wifi_check",
+          "Name": "WiFi 模块检测",
+          "Description": "确认 WiFi 模块已加载",
+          "Order": 7,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "dumpsys wifi | grep 'Wi-Fi is'",
+          "Expected": "contains:enabled",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "adb"
+        },
+        {
+          "Id": "step_bt_check",
+          "Name": "蓝牙模块检测",
+          "Description": "确认蓝牙模块已加载",
+          "Order": 8,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "dumpsys bluetooth_manager | grep 'enabled'",
+          "Expected": "contains:enabled",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "adb"
+        },
+        {
+          "Id": "step_display_check",
+          "Name": "显示屏检测",
+          "Description": "获取显示分辨率和密度",
+          "Order": 9,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "wm size",
+          "Expected": "regex:\\d+x\\d+",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "adb",
+          "StoreResultAs": "displaySize"
+        },
+        {
+          "Id": "step_touch_check",
+          "Name": "触摸屏检测",
+          "Description": "确认触摸设备已注册",
+          "Order": 10,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "getevent -pl | grep -i touch",
+          "Expected": "contains:touch",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "adb"
+        },
+        {
+          "Id": "step_camera_check",
+          "Name": "摄像头检测",
+          "Description": "确认摄像头设备可用",
+          "Order": 11,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "dumpsys media.camera | grep 'Device version'",
+          "Expected": "contains:Device version",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "adb",
+          "StoreResultAs": "cameraInfo"
+        },
+        {
+          "Id": "step_sensor_list",
+          "Name": "传感器列表检查",
+          "Description": "确认关键传感器已注册",
+          "Order": 12,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "dumpsys sensorservice | grep -E 'accelerometer|gyroscope|proximity'",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "adb",
+          "StoreResultAs": "sensorList",
+          "ValidationRules": {
+            "MustContainAll": ["accelerometer"]
+          }
+        },
+        {
+          "Id": "step_battery_check",
+          "Name": "电池状态检查",
+          "Description": "读取电池电压和电量",
+          "Order": 13,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "dumpsys battery",
+          "Expected": "contains:level",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "adb",
+          "StoreResultAs": "batteryInfo",
+          "ValidationRules": {
+            "MustContainAll": ["level", "voltage"],
+            "MustNotContainAny": ["error", "invalid"]
+          }
+        },
+        {
+          "Id": "step_install_test_apk",
+          "Name": "安装测试 APK",
+          "Description": "安装工厂测试应用",
+          "Order": 14,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "adb install -r /factory/FactoryTest.apk",
+          "Expected": "contains:Success",
+          "Timeout": 30000,
+          "Delay": 1000,
+          "Channel": "adb"
+        },
+        {
+          "Id": "step_factory_test_run",
+          "Name": "运行工厂测试",
+          "Description": "启动工厂测试应用并等待结果",
+          "Order": 15,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "adb",
+          "Command": "am instrument -w com.factory.test/.TestRunner",
+          "Expected": "contains:OK",
+          "Timeout": 120000,
+          "Delay": 2000,
+          "Channel": "adb",
+          "StoreResultAs": "factoryTestResult",
+          "ValidationRules": {
+            "MustContainAll": ["OK"],
+            "MustNotContainAny": ["FAILURES", "Error"]
+          }
+        }
+      ]
+    }
+  }
+}

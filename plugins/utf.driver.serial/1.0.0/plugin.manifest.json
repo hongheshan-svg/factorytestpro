@@ -1,0 +1,21 @@
+{
+  "pluginId": "utf.driver.serial",
+  "name": "UTF Serial Driver",
+  "version": "1.0.0",
+  "pluginApiVersion": "1.0",
+  "entryAssembly": "UTF.Plugins.Drivers.dll",
+  "entryType": "UTF.Plugins.Drivers.SerialDriverPlugin",
+  "supportedStepTypes": ["serial", "uart", "rs232", "rs485"],
+  "supportedChannels": ["serial", "uart", "com"],
+  "priority": 10,
+  "publisher": "UTF",
+  "frameworkVersion": "net10.0",
+  "settings": {
+    "BaudRate": "115200",
+    "DataBits": "8",
+    "StopBits": "One",
+    "Parity": "None",
+    "ReadTimeoutMs": "2000",
+    "LineEnding": "\\r\\n"
+  }
+}

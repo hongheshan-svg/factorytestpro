@@ -1,0 +1,467 @@
+<Window x:Class="UTF.UI.ConfigurationCenterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="配置管理中心" Height="700" Width="1000"
+        WindowStartupLocation="CenterOwner"
+        Background="#F5F5F5">
+
+    <Window.Resources>
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="Background" Value="#007ACC"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.8"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SectionLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#2C3E50"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+
+        <Style x:Key="ModernTextBox" TargetType="TextBox">
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="BorderBrush" Value="#CCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Style.Triggers>
+                <Trigger Property="IsFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="#007ACC"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 标题栏 -->
+        <Border Grid.Row="0" Background="White" Padding="20,15" Margin="0,0,0,10">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+            </Border.Effect>
+            <Grid>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <TextBlock Text="⚙️" FontSize="20" Margin="0,0,8,0"/>
+                    <TextBlock Text="配置管理中心" FontSize="18" FontWeight="Bold" Foreground="#2C3E50" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="🔄 重新加载" Style="{StaticResource ActionButton}" Margin="0,0,10,0" Click="ReloadConfig_Click"/>
+                    <Button Content="✓ 验证配置" Style="{StaticResource ActionButton}" Background="#28A745" Click="ValidateConfig_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 主体内容 - TabControl -->
+        <TabControl Grid.Row="1" Margin="10,0" Background="Transparent" BorderThickness="0">
+            <!-- Tab 1: 系统设置 -->
+            <TabItem Header="🖥️ 系统设置">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Border Background="White" CornerRadius="8" Padding="20" Margin="10">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="日志与存储" Style="{StaticResource SectionLabel}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="日志级别:" Style="{StaticResource FieldLabel}"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1" x:Name="LogLevelCombo" Margin="0,0,0,10">
+                                    <ComboBoxItem Content="Debug"/>
+                                    <ComboBoxItem Content="Info" IsSelected="True"/>
+                                    <ComboBoxItem Content="Warning"/>
+                                    <ComboBoxItem Content="Error"/>
+                                </ComboBox>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="结果路径:" Style="{StaticResource FieldLabel}" Margin="0,10,0,4"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="ResultsPathText" Style="{StaticResource ModernTextBox}" Margin="0,10,0,10"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="自动保存:" Style="{StaticResource FieldLabel}" Margin="0,10,0,4"/>
+                                <CheckBox Grid.Row="2" Grid.Column="1" x:Name="AutoSaveCheck" Content="启用自动保存测试结果" Margin="0,10,0,0"/>
+                            </Grid>
+
+                            <TextBlock Text="界面与语言" Style="{StaticResource SectionLabel}" Margin="0,20,0,8"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="默认语言:" Style="{StaticResource FieldLabel}"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1" x:Name="LanguageCombo" Margin="0,0,0,10">
+                                    <ComboBoxItem Content="简体中文 (zh-CN)" IsSelected="True"/>
+                                    <ComboBoxItem Content="English (en-US)"/>
+                                    <ComboBoxItem Content="日本語 (ja-JP)"/>
+                                </ComboBox>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="主题:" Style="{StaticResource FieldLabel}" Margin="0,10,0,4"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" x:Name="ThemeCombo" Margin="0,10,0,0">
+                                    <ComboBoxItem Content="Light" IsSelected="True"/>
+                                    <ComboBoxItem Content="Dark"/>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Tab 2: DUT配置 -->
+            <TabItem Header="📱 DUT配置">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Border Background="White" CornerRadius="8" Padding="20" Margin="10">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="产品信息" Style="{StaticResource SectionLabel}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="产品名称:" Style="{StaticResource FieldLabel}"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" x:Name="ProductNameText" Style="{StaticResource ModernTextBox}" Margin="0,0,0,10"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="产品型号:" Style="{StaticResource FieldLabel}" Margin="0,10,0,4"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="ProductModelText" Style="{StaticResource ModernTextBox}" Margin="0,10,0,10"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="产品类别:" Style="{StaticResource FieldLabel}" Margin="0,10,0,4"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" x:Name="ProductCategoryText" Style="{StaticResource ModernTextBox}" Margin="0,10,0,0"/>
+                            </Grid>
+
+                            <TextBlock Text="全局测试参数" Style="{StaticResource SectionLabel}" Margin="0,20,0,8"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="最大并发数:" Style="{StaticResource FieldLabel}"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" x:Name="MaxConcurrentText" Style="{StaticResource ModernTextBox}" Margin="0,0,0,10"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="测试超时(秒):" Style="{StaticResource FieldLabel}" Margin="0,10,0,4"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="TestTimeoutText" Style="{StaticResource ModernTextBox}" Margin="0,10,0,10"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="重试次数:" Style="{StaticResource FieldLabel}" Margin="0,10,0,4"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" x:Name="RetryCountText" Style="{StaticResource ModernTextBox}" Margin="0,10,0,0"/>
+                            </Grid>
+
+                            <!-- 串口配置 -->
+                            <TextBlock Text="串口配置" Style="{StaticResource SectionLabel}" Margin="0,20,0,8"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ListBox Grid.Column="0" x:Name="SerialPortsList" Height="100" Margin="0,0,8,0"
+                                         BorderBrush="#CCC" BorderThickness="1"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <TextBox x:Name="NewSerialPortText" Width="80" Style="{StaticResource ModernTextBox}"
+                                                 Text="COM" Margin="0,0,4,0"/>
+                                        <Button Content="添加" Style="{StaticResource ActionButton}" Background="#28A745"
+                                                Padding="8,4" Click="AddSerialPort_Click"/>
+                                    </StackPanel>
+                                    <Button Content="删除选中" Style="{StaticResource ActionButton}" Background="#DC3545"
+                                            Padding="8,4" Click="DeleteSerialPort_Click"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- 网络主机配置 -->
+                            <TextBlock Text="网络主机配置" Style="{StaticResource SectionLabel}" Margin="0,20,0,8"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ListBox Grid.Column="0" x:Name="NetworkHostsList" Height="100" Margin="0,0,8,0"
+                                         BorderBrush="#CCC" BorderThickness="1"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <TextBox x:Name="NewNetworkHostText" Width="120" Style="{StaticResource ModernTextBox}"
+                                                 Text="192.168.1." Margin="0,0,4,0"/>
+                                        <Button Content="添加" Style="{StaticResource ActionButton}" Background="#28A745"
+                                                Padding="8,4" Click="AddNetworkHost_Click"/>
+                                    </StackPanel>
+                                    <Button Content="删除选中" Style="{StaticResource ActionButton}" Background="#DC3545"
+                                            Padding="8,4" Click="DeleteNetworkHost_Click"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- 命名模板 -->
+                            <TextBlock Text="命名模板" Style="{StaticResource SectionLabel}" Margin="0,20,0,8"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="显示名模板:" Style="{StaticResource FieldLabel}"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" x:Name="NamingTemplateText" Style="{StaticResource ModernTextBox}"
+                                         Margin="0,0,0,10" TextChanged="NamingTemplate_TextChanged"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="ID模板:" Style="{StaticResource FieldLabel}" Margin="0,10,0,4"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="NamingIdTemplateText" Style="{StaticResource ModernTextBox}"
+                                         Margin="0,10,0,10" TextChanged="NamingTemplate_TextChanged"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="预览:" Style="{StaticResource FieldLabel}" Margin="0,10,0,4"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="NamingPreviewText"
+                                           FontSize="11" Foreground="#555" Margin="0,10,0,0" VerticalAlignment="Center"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Tab 3: 测试步骤 -->
+            <TabItem Header="🧪 测试步骤">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 测试模式信息 -->
+                    <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+                        </Border.Effect>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="测试模式:" FontSize="12" FontWeight="SemiBold" Foreground="#555" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="TestModeNameText" Text="生产测试" FontSize="12" FontWeight="Bold" Foreground="#007ACC"/>
+                            <TextBlock Text="|" Foreground="#CCC" Margin="10,0"/>
+                            <TextBlock Text="最大重试:" FontSize="11" Foreground="#666" Margin="0,0,4,0"/>
+                            <TextBlock x:Name="MaxRetriesText" Text="2" FontSize="11" Foreground="#333"/>
+                            <TextBlock Text="|" Foreground="#CCC" Margin="10,0"/>
+                            <CheckBox x:Name="EnableParallelCheck" Content="启用并行测试" FontSize="11" IsChecked="True"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 步骤工具栏 -->
+                    <Border Grid.Row="1" Background="White" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+                        </Border.Effect>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="➕ 新增" Style="{StaticResource ActionButton}" Background="#28A745" Click="AddStep_Click"/>
+                            <Button Content="🗑️ 删除" Style="{StaticResource ActionButton}" Background="#DC3545" Margin="10,0,0,0" Click="DeleteStep_Click"/>
+                            <Button Content="⬆️ 上移" Style="{StaticResource ActionButton}" Margin="10,0,0,0" Click="MoveStepUp_Click"/>
+                            <Button Content="⬇️ 下移" Style="{StaticResource ActionButton}" Margin="10,0,0,0" Click="MoveStepDown_Click"/>
+                            <Button Content="📋 复制" Style="{StaticResource ActionButton}" Margin="10,0,0,0" Click="CopyStep_Click"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 步骤列表 -->
+                    <Border Grid.Row="2" Background="White" CornerRadius="8" Padding="15">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+                        </Border.Effect>
+                        <DataGrid x:Name="TestStepsGrid" AutoGenerateColumns="False" CanUserAddRows="False"
+                                  SelectionMode="Single"
+                                  SelectionChanged="TestStepsGrid_SelectionChanged">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="顺序" Binding="{Binding Order}" Width="50"/>
+                                <DataGridCheckBoxColumn Header="启用" Binding="{Binding Enabled}" Width="50"/>
+                                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="80"/>
+                                <DataGridTemplateColumn Header="名称" Width="150">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Name}" Margin="4,2"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                    <DataGridTemplateColumn.CellEditingTemplate>
+                                        <DataTemplate>
+                                            <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellEditingTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="80"/>
+                                <DataGridTextColumn Header="通道" Binding="{Binding Channel}" Width="70"/>
+                                <DataGridTemplateColumn Header="命令" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Command}" Margin="4,2" TextTrimming="CharacterEllipsis"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                    <DataGridTemplateColumn.CellEditingTemplate>
+                                        <DataTemplate>
+                                            <TextBox Text="{Binding Command, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellEditingTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="期望结果" Width="120">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Expected}" Margin="4,2" TextTrimming="CharacterEllipsis"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                    <DataGridTemplateColumn.CellEditingTemplate>
+                                        <DataTemplate>
+                                            <TextBox Text="{Binding Expected, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellEditingTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="超时(ms)" Width="80">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Timeout}" Margin="4,2"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                    <DataGridTemplateColumn.CellEditingTemplate>
+                                        <DataTemplate>
+                                            <TextBox Text="{Binding Timeout, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellEditingTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+
+                    <!-- 步骤详情编辑面板 -->
+                    <Border Grid.Row="3" x:Name="StepDetailPanel" Background="White" CornerRadius="8" Padding="15" Margin="0,10,0,0" Visibility="Collapsed">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="步骤详情编辑" FontSize="13" FontWeight="SemiBold" Foreground="#2C3E50" Margin="0,0,0,10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="步骤ID:" Style="{StaticResource FieldLabel}"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" x:Name="DetailIdText" Style="{StaticResource ModernTextBox}" Margin="0,0,10,8"/>
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="步骤名称:" Style="{StaticResource FieldLabel}"/>
+                                <TextBox Grid.Row="0" Grid.Column="3" x:Name="DetailNameText" Style="{StaticResource ModernTextBox}" Margin="0,0,0,8"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="类型:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" x:Name="DetailTypeCombo" Margin="0,8,10,8" IsEditable="True">
+                                    <ComboBoxItem Content="serial"/>
+                                    <ComboBoxItem Content="custom"/>
+                                    <ComboBoxItem Content="instrument"/>
+                                </ComboBox>
+                                <TextBlock Grid.Row="1" Grid.Column="2" Text="通道:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
+                                <ComboBox Grid.Row="1" Grid.Column="3" x:Name="DetailChannelCombo" Margin="0,8,0,8" IsEditable="True">
+                                    <ComboBoxItem Content="Serial"/>
+                                    <ComboBoxItem Content="Cmd"/>
+                                    <ComboBoxItem Content="Telnet"/>
+                                </ComboBox>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="目标:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
+                                <ComboBox Grid.Row="2" Grid.Column="1" x:Name="DetailTargetCombo" Margin="0,8,10,8">
+                                    <ComboBoxItem Content="dut"/>
+                                    <ComboBoxItem Content="instrument"/>
+                                    <ComboBoxItem Content="system"/>
+                                </ComboBox>
+                                <TextBlock Grid.Row="2" Grid.Column="2" Text="描述:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
+                                <TextBox Grid.Row="2" Grid.Column="3" x:Name="DetailDescriptionText" Style="{StaticResource ModernTextBox}" Margin="0,8,0,8"/>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="命令:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
+                                <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" x:Name="DetailCommandText" Style="{StaticResource ModernTextBox}" Margin="0,8,0,8"/>
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="期望结果:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
+                                <TextBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" x:Name="DetailExpectedText" Style="{StaticResource ModernTextBox}" Margin="0,8,0,8"/>
+
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="超时(ms):" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
+                                <TextBox Grid.Row="5" Grid.Column="1" x:Name="DetailTimeoutText" Style="{StaticResource ModernTextBox}" Margin="0,8,10,0"/>
+                                <TextBlock Grid.Row="5" Grid.Column="2" Text="延迟(ms):" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
+                                <TextBox Grid.Row="5" Grid.Column="3" x:Name="DetailDelayText" Style="{StaticResource ModernTextBox}" Margin="0,8,0,0"/>
+
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="最大重试:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
+                                <TextBox Grid.Row="6" Grid.Column="1" x:Name="DetailMaxRetriesText" Style="{StaticResource ModernTextBox}" Margin="0,8,10,0"/>
+                                <TextBlock Grid.Row="6" Grid.Column="2" Text="失败继续:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
+                                <CheckBox Grid.Row="6" Grid.Column="3" x:Name="DetailContinueOnFailureCheck"
+                                          Content="失败后继续执行" Margin="0,10,0,0" VerticalAlignment="Center"/>
+                            </Grid>
+                            <Button Content="✓ 应用修改" Style="{StaticResource ActionButton}" Background="#007ACC"
+                                    HorizontalAlignment="Right" Margin="0,10,0,0" Click="ApplyStepDetail_Click"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <!-- 底部操作栏 -->
+        <Border Grid.Row="2" Background="White" Padding="15,10" Margin="0,10,0,0">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+            </Border.Effect>
+            <Grid>
+                <TextBlock x:Name="ValidationStatusText" Text="✅ 配置有效" FontSize="12" Foreground="#28A745" VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="💾 保存配置" Style="{StaticResource ActionButton}" Background="#28A745" Click="SaveConfig_Click"/>
+                    <Button Content="取消" Style="{StaticResource ActionButton}" Background="#6C757D" Margin="10,0,0,0" Click="Cancel_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

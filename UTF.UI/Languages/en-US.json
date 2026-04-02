@@ -1,0 +1,182 @@
+{
+  "LanguageInfo": {
+    "Code": "en-US",
+    "Name": "English",
+    "NativeName": "English",
+    "Flag": "🇺🇸",
+    "IsDefault": false
+  },
+  "Translations": {
+    "Login": {
+      "Title": "User Login",
+      "Username": "Username",
+      "Password": "Password",
+      "RememberMe": "Remember Me",
+      "LoginButton": "🚀 Login",
+      "CancelButton": "❌ Cancel",
+      "Language": "Language",
+      "DefaultAccount": "💡 Default Account Info",
+      "DefaultUsername": "Username: admin",
+      "DefaultPassword": "Password: admin123",
+      "DefaultRole": "Role: Super Administrator"
+    },
+    "Main": {
+      "Title": "Universal Test Framework",
+      "StartTest": "▶️ Start Test",
+      "PauseTest": "⏸️ Pause Test",
+      "StopTest": "⏹️ Stop Test",
+      "CurrentStatus": "Current Status:",
+      "SystemReady": "System Ready",
+      "User": "User:",
+      "Station": "Station:",
+      "NotLoggedIn": "Not Logged In",
+      "DUTStatistics": "📊 DUT Test Statistics",
+      "TotalDUT": "Total DUT",
+      "Running": "Running",
+      "Waiting": "Waiting",
+      "Completed": "Completed",
+      "Failed": "Failed",
+      "PassRate": "Pass Rate",
+      "DUTMonitor": "🎛️ DUT Monitor",
+      "UseToolbar": "Use toolbar above for test control"
+    },
+    "Menu": {
+      "Configuration": "Configuration(_C)",
+      "ImportConfig": "Import Config(_I)",
+      "ExportConfig": "Export Config(_E)",
+      "ConfigurationManagement": "Configuration Management(_M)",
+      "SystemConfig": "System Config(_S)",
+      "Exit": "Exit(_X)",
+      "Help": "Help(_H)",
+      "UserManual": "User Manual(_M)",
+      "About": "About(_A)",
+      "Language": "Language(_L)"
+    },
+    "Common": {
+      "OK": "OK",
+      "Cancel": "❌ Cancel",
+      "Yes": "Yes",
+      "No": "No",
+      "Error": "Error",
+      "Warning": "Warning",
+      "Information": "Information",
+      "Success": "Success",
+      "Confirm": "Confirm",
+      "Close": "🚪 Close",
+      "Save": "💾 Save",
+      "SaveAll": "💾 Save All",
+      "Load": "Load",
+      "Delete": "Delete",
+      "Edit": "Edit",
+      "Add": "Add",
+      "Remove": "Remove",
+      "System": "System"
+    },
+    "Config": {
+      "LanguageChanged": "Language setting has been changed, interface refreshed",
+      "Success": "Settings Successful",
+      "Saved": "{0} has been saved",
+      "SaveSuccess": "Save Successful",
+      "AllSaved": "All configurations have been saved"
+    },
+    "Permission": {
+      "Insufficient": "Insufficient Permission",
+      "NoTestPlanCreate": "You don't have permission to create test plans",
+      "NoTestPlanEdit": "You don't have permission to edit test plans",
+      "NoTestPlanOpen": "You don't have permission to open test plans",
+      "NoTestPlanSave": "You don't have permission to save test plans",
+      "NoSystemConfig": "You don't have system configuration permission",
+      "NoDeviceDiscovery": "You don't have device discovery permission",
+      "NoDeviceCalibration": "You don't have device calibration permission",
+      "NoDeviceManagement": "You don't have device management permission",
+      "NoDataView": "You don't have data view permission",
+      "NoReportGeneration": "You don't have report generation permission",
+      "NoDataExport": "You don't have data export permission",
+      "NoLogView": "You don't have log view permission",
+      "NoTestExecution": "You don't have test execution permission"
+    },
+    "File": {
+      "OpenTestPlan": "Open Test Plan",
+      "SaveTestPlan": "Save Test Plan",
+      "ImportConfig": "Import System Configuration",
+      "ExportConfig": "Export System Configuration",
+      "TestPlanFiles": "Test Plan Files (*.json)|*.json|All Files (*.*)|*.*",
+      "ConfigFiles": "Configuration Files (*.json)|*.json|XML Config (*.xml)|*.xml|All Files (*.*)|*.*",
+      "ReportFiles": "Report Files (*.pdf)|*.pdf|JSON Reports (*.json)|*.json|All Files (*.*)|*.*",
+      "DataFiles": "Data Files (*.csv)|*.csv|Excel Files (*.xlsx)|*.xlsx|All Files (*.*)|*.*",
+      "LoadSuccess": "Load Successful",
+      "SaveSuccess": "Save Successful",
+      "ImportSuccess": "Import Successful",
+      "ExportSuccess": "Export Successful"
+    },
+    "Device": {
+      "Scanning": "Scanning devices...",
+      "ScanComplete": "Device scan complete",
+      "ScanFailed": "Device scan failed",
+      "DevicesFound": "Found {0} devices",
+      "NoDevicesFound": "No devices found",
+      "ConnectFailed": "Failed to connect device",
+      "ConnectSuccess": "Successfully connected to device",
+      "Connecting": "Connecting to device...",
+      "Connected": "Connected",
+      "Calibration": "Device Calibration",
+      "CalibrationInProgress": "Device calibration function is in progress...",
+      "CalibrationCompleted": "Device calibration completed",
+      "ConnectingAll": "Connecting all devices...",
+      "ConnectedCount": "Successfully connected {0} devices",
+      "ConnectResult": "Connection Result"
+    },
+    "Test": {
+      "BatchTest": "Batch Test",
+      "BatchTestConfirm": "Are you sure you want to start batch testing for all DUTs?",
+      "BatchTestStarted": "Batch test started"
+    },
+    "Data": {
+      "TestHistory": "Test History",
+      "TestHistoryWindow": "Test history window feature is under development...",
+      "TestHistoryOpened": "Test history window opened",
+      "ExportData": "Export Data",
+      "Export": "Data Export",
+      "ExportSuccess": "Data export successful"
+    },
+    "Report": {
+      "Generate": "Generate Report",
+      "SaveReport": "Save Report",
+      "GenerateSuccess": "Report generated successfully"
+    },
+    "System": {
+      "Config": "System Configuration",
+      "ConfigWindow": "System configuration window feature is under development...",
+      "ConfigOpened": "System configuration window opened",
+      "Logs": "System Logs",
+      "LogsWindow": "System logs window feature is under development...",
+      "LogsOpened": "System logs window opened"
+    },
+    "Error": {
+      "OpenTestPlanEditor": "Failed to open test plan editor",
+      "LoadTestPlan": "Failed to load test plan",
+      "SaveTestPlan": "Failed to save test plan",
+      "ImportConfig": "Failed to import configuration",
+      "ExportConfig": "Failed to export configuration",
+      "DeviceScan": "Device scan failed",
+      "DeviceCalibration": "Device calibration failed",
+      "ConnectAllDevices": "Connect all devices failed",
+      "BatchTest": "Batch test failed",
+      "ViewTestHistory": "View test history failed",
+      "GenerateReport": "Generate report failed",
+      "ExportData": "Export data failed",
+      "SystemConfig": "System configuration failed",
+      "SystemLogs": "System logs failed"
+    },
+    "DUT": {
+      "ViewLog": "📝 View Full Log",
+      "ViewDetails": "📊 View Details",
+      "PauseResume": "⏸️ Pause/Resume",
+      "Retest": "🔧 Retest"
+    },
+    "Exit": {
+      "Confirm": "Are you sure you want to exit the system?",
+      "ConfirmTitle": "Confirm Exit"
+    }
+  }
+}

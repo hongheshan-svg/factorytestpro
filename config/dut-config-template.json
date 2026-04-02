@@ -1,0 +1,113 @@
+{
+  "ConfigurationInfo": {
+    "Name": "新产品测试配置",
+    "Version": "1.0.0",
+    "CreatedDate": "2024-01-01T00:00:00Z",
+    "Description": "产品专用测试配置 - 根据实际产品修改",
+    "Author": "UTF System"
+  },
+  
+  "SystemSettings": {
+    "LogLevel": "Info",
+    "AutoSaveResults": true,
+    "ResultsPath": "./test-results",
+    "BackupEnabled": true,
+    "MaxLogFiles": 10,
+    "LogRotationSizeMB": 50,
+    "DefaultLanguage": "zh-CN",
+    "Theme": "Light",
+    "AutoRefresh": true,
+    "RefreshInterval": 2000
+  },
+  
+  "DUTConfiguration": {
+    "ProductInfo": {
+      "Name": "产品名称",
+      "Model": "产品型号",
+      "Icon": "🔧",
+      "Category": "产品类别",
+      "ExpectedSoftwareVersion": "期望的软件版本"
+    },
+    
+    "GlobalSettings": {
+      "DefaultMaxConcurrent": 16,
+      "EnablePreTestCheck": true,
+      "DefaultVoltage": 5.0,
+      "DefaultCurrent": 0.5,
+      "TestTimeout": 300,
+      "RetryCount": 3,
+      "RetryDelay": 2000
+    },
+    
+    "MacRanges": [
+      { "start": "00:00:00:00:00:00", "end": "00:00:00:00:00:00" }
+    ],
+    
+    "Connections": {
+      "Primary": {
+        "Type": "Serial",
+        "BaudRate": 115200,
+        "DataBits": 8,
+        "StopBits": 1,
+        "Parity": "None"
+      },
+      "Secondary": {
+        "Type": "Network",
+        "Port": 23,
+        "IPRange": "192.168.1.10-192.168.1.20"
+      }
+    },
+    
+    "CommunicationEndpoints": {
+      "SerialPorts": [
+        "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "COM10",
+        "COM11", "COM12", "COM13", "COM14", "COM15", "COM16"
+      ],
+      "NetworkHosts": [
+        "192.168.1.10", "192.168.1.11", "192.168.1.12", "192.168.1.13",
+        "192.168.1.14", "192.168.1.15", "192.168.1.16", "192.168.1.17"
+      ]
+    },
+    
+    "NamingConfig": {
+      "Template": "{TypeName}测试工位{Index}",
+      "IdTemplate": "DUT-{Index}"
+    }
+  },
+  
+  "TestProjectConfiguration": {
+    "TestMode": {
+      "Id": "production",
+      "Name": "生产测试",
+      "Icon": "🏭",
+      "Description": "生产线完整测试流程",
+      "DefaultTimeout": 300000,
+      "EnableParallel": true,
+      "MaxRetries": 2
+    },
+    
+    "TestProject": {
+      "Id": "production_test",
+      "Name": "生产测试项目",
+      "Description": "完整生产测试流程",
+      "Enabled": true,
+      "Steps": [
+        {
+          "Id": "step_001",
+          "Name": "测试步骤1",
+          "Description": "测试步骤描述",
+          "Order": 1,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "custom",
+          "Command": "测试命令",
+          "Expected": "contains:期望结果",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Cmd"
+        }
+      ]
+    }
+  }
+}
+

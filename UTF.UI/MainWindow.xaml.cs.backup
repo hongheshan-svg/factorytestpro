@@ -1,0 +1,275 @@
+using System;
+using System.Collections.Generic;
+using System.Windows;
+using System.Windows.Threading;
+using Microsoft.Extensions.DependencyInjection;
+using UTF.Core;
+using UTF.Core.Caching;
+using UTF.UI.ViewModels;
+using UTF.UI.Localization;
+using UTF.UI.Services;
+
+namespace UTF.UI;
+
+/// <summary>
+/// Interaction logic for MainWindow.xaml
+/// </summary>
+public partial class MainWindow : Window
+{
+    private readonly DispatcherTimer _timer = new();
+    private readonly DispatcherTimer _testCompletionMonitor = new();
+    private readonly DispatcherTimer _logUpdateTimer = new();
+    private DateTime? _testStartTime = null;
+    private DateTime? _testEndTime = null;
+    private int _totalTestsCount = 0;
+    private readonly object _testStatsLock = new();
+    private bool _isTestRunning = false;
+    private UTF.UI.Services.IPermissionManager _permissionManager = null!;
+    private DUTTestListViewModel _dutListViewModel = null!;
+    private readonly ITestEngine _testEngine;
+    private readonly ICache _cache;
+    private readonly UTF.Logging.ILogger _logger;
+    private readonly DUTMonitorManager _dutMonitorManager;
+    private readonly ConfigurationManager _configManager;
+    private readonly IConfigurationAdapter _configAdapter;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly Dictionary<string, object> _configControls = new();
+    private int _timerTickCount = 0;
+    private int _cachedTotal = 0;
+    private int _cachedRunning = 0;
+    private int _cachedWaiting = 0;
+    private int _cachedPassed = 0;
+    private int _cachedFailed = 0;
+    private DateTime _lastStatisticsUpdate = DateTime.MinValue;
+
+    public MainWindow(
+        UTF.Logging.ILogger logger,
+        ICache cache,
+        ITestEngine testEngine,
+        ConfigurationManager configManager,
+        IConfigurationAdapter configAdapter,
+        DUTMonitorManager dutMonitorManager,
+        IServiceProvider serviceProvider)
+    {
+        _logger = logger;
+        _cache = cache;
+        _testEngine = testEngine;
+        _configManager = configManager;
+        _configAdapter = configAdapter;
+        _dutMonitorManager = dutMonitorManager;
+        _serviceProvider = serviceProvider;
+
+        _logger.Info("MainWindow 正在初始化（通过依赖注入）");
+
+        try
+        {
+            InitializeComponent();
+
+            _permissionManager = new UTF.UI.Services.PermissionManager();
+
+            var languageManager = LocalizationService.GetLanguageManager();
+            LocalizationHelper.Initialize(languageManager);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"启动错误: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            throw;
+        }
+
+        _dutListViewModel = new DUTTestListViewModel();
+
+        _timer.Interval = TimeSpan.FromSeconds(1);
+        _timer.Tick += Timer_Tick;
+        _timer.Start();
+
+        _logUpdateTimer.Interval = TimeSpan.FromMilliseconds(500);
+        _logUpdateTimer.Tick += LogUpdateTimer_Tick;
+        _logUpdateTimer.Start();
+
+        InitializeUI();
+        UpdateUserDisplay();
+
+        _ = LoadAndDisplayProductModelAsync();
+
+        InitializeDUTList();
+
+        _dutMonitorManager.StatisticsUpdateRequested += UpdateDUTStatistics;
+        _dutMonitorManager.AllTestsCompleted += OnAllTestsCompleted;
+
+        // Subscribe to configuration changes
+        _configManager.ConfigurationChanged += OnConfigurationChanged;
+
+        this.Loaded += MainWindow_Loaded;
+
+        UpdateTestButtonStates();
+    }
+
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        RefreshLanguageBindings();
+    }
+
+    private void InitializeUI()
+    {
+        UpdateTestStepsList();
+        InitializeLog();
+    }
+
+    private async void InitializeDUTList()
+    {
+        try
+        {
+            await _dutMonitorManager.InitializeAsync(MainDUTListDataGrid);
+            System.Diagnostics.Debug.WriteLine("DUT监控台管理器初始化成功");
+            var loaded = _dutMonitorManager.LoadedPlugins.Count;
+            var failed = _dutMonitorManager.LastLoadReport?.FailedCount ?? 0;
+            UpdatePluginStatusBar(loaded, failed);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"初始化DUT列表失败: {ex.Message}");
+            _logger?.Error("DUT监控台管理器初始化失败", ex);
+
+            MainDUTListDataGrid.ItemsSource = _dutListViewModel.DUTs;
+            LoadSimulatedDUTs();
+        }
+    }
+
+    private void UpdateTestStepsList()
+    {
+    }
+
+    private void UpdateStatistics()
+    {
+        UpdateDUTStatistics();
+    }
+
+    private void InitializeLog()
+    {
+    }
+
+    private void LogUpdateTimer_Tick(object? sender, EventArgs e)
+    {
+        try
+        {
+            var dutItems = _dutMonitorManager?.GetDUTItems();
+            if (dutItems != null)
+            {
+                foreach (var dut in dutItems)
+                {
+                    dut.FlushPendingLogs();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error($"批量刷新日志失败: {ex.Message}", ex);
+        }
+    }
+
+    private void UpdatePluginStatusBar(int loaded, int failed)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            PluginStatusText.Text = $"插件: {loaded}个";
+            PluginStatusBorder.Background = new System.Windows.Media.SolidColorBrush(
+                failed > 0
+                    ? System.Windows.Media.Color.FromRgb(0xE7, 0x4C, 0x3C)
+                    : System.Windows.Media.Color.FromRgb(0x27, 0xAE, 0x60));
+            PluginStatusBorder.ToolTip = failed > 0
+                ? $"已加载 {loaded} 个插件，{failed} 个加载失败，点击查看详情"
+                : $"已加载 {loaded} 个插件，点击查看详情";
+        });
+    }
+
+    private void UpdateUserDisplay()
+    {
+        var userDisplay = FindUserDisplayInMenu();
+        if (userDisplay != null)
+        {
+            if (_permissionManager.CurrentUser != null)
+            {
+                userDisplay.Text = $"用户: {_permissionManager.CurrentUser.DisplayName}";
+            }
+            else
+            {
+                userDisplay.Text = "用户: 管理员";
+            }
+        }
+    }
+
+    private void ApplyPermissions()
+    {
+    }
+
+    private System.Windows.Controls.TextBlock? FindUserDisplayInMenu()
+    {
+        return null;
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _timer?.Stop();
+        base.OnClosed(e);
+    }
+
+    private void InitializeLanguageMenu() { }
+    private void NewSessionBtn_Click(object sender, RoutedEventArgs e) { LoadSimulatedDUTs(); }
+    private void LoadPlanBtn_Click(object sender, RoutedEventArgs e) { LoadSimulatedDUTs(); }
+    private void NewMultiDutSessionBtn_Click(object sender, RoutedEventArgs e) { }
+    private void LoadSessionBtn_Click(object sender, RoutedEventArgs e) { }
+    private void PauseSessionBtn_Click(object sender, RoutedEventArgs e) { }
+    private void ResumeSessionBtn_Click(object sender, RoutedEventArgs e) { }
+    private void StopSessionBtn_Click(object sender, RoutedEventArgs e) { }
+
+    private void ExitApp_Click(object sender, RoutedEventArgs e)
+    {
+        var result = MessageBox.Show("确定要退出系统吗？", "确认退出",
+            MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+        if (result == MessageBoxResult.Yes)
+        {
+            Application.Current.Shutdown();
+        }
+    }
+
+    private void OpenConfigCenter_Click(object sender, RoutedEventArgs e)
+    {
+        var win = _serviceProvider.GetRequiredService<ConfigurationCenterWindow>();
+        win.Owner = this;
+        if (win.ShowDialog() == true)
+        {
+            _ = RefreshConfigurationAfterImportAsync();
+        }
+    }
+
+    private void OpenPluginManager_Click(object sender, RoutedEventArgs e)
+    {
+        var win = new PluginManagementWindow(_dutMonitorManager);
+        win.Owner = this;
+        win.ShowDialog();
+    }
+
+    private void OpenDeviceManager_Click(object sender, RoutedEventArgs e)
+    {
+        var deviceWindow = new DeviceManagementWindow(_permissionManager)
+        {
+            Owner = this
+        };
+        deviceWindow.ShowDialog();
+    }
+
+    private void OpenUserManager_Click(object sender, RoutedEventArgs e)
+    {
+        var userWindow = new UserManagementWindow(_permissionManager)
+        {
+            Owner = this
+        };
+        userWindow.ShowDialog();
+    }
+
+    private void PluginStatus_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        OpenPluginManager_Click(sender, null!);
+    }
+}

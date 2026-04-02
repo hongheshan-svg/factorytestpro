@@ -1,0 +1,345 @@
+{
+  "ConfigurationInfo": {
+    "Name": "PCBA 多仪器联合测试配置",
+    "Version": "2.0.0",
+    "CreatedDate": "2026-03-24T00:00:00Z",
+    "Description": "PCB 板级测试模板 — 结合万用表、示波器、可编程电源、频谱仪等仪器进行全自动检测",
+    "Author": "UTF System",
+    "Category": "instrument-integration"
+  },
+
+  "SystemSettings": {
+    "LogLevel": "Debug",
+    "AutoSaveResults": true,
+    "ResultsPath": "./test-results/pcba",
+    "BackupEnabled": true,
+    "MaxLogFiles": 30,
+    "LogRotationSizeMB": 100,
+    "DefaultLanguage": "zh-CN",
+    "Theme": "Dark",
+    "AutoRefresh": true,
+    "RefreshInterval": 1000
+  },
+
+  "DUTConfiguration": {
+    "ProductInfo": {
+      "Name": "WiFi 模组 PCBA",
+      "Model": "WM-2400A",
+      "Icon": "🔧",
+      "Category": "PCBA-射频模组",
+      "ExpectedSoftwareVersion": "N/A"
+    },
+
+    "GlobalSettings": {
+      "DefaultMaxConcurrent": 4,
+      "EnablePreTestCheck": true,
+      "DefaultVoltage": 3.3,
+      "DefaultCurrent": 1.0,
+      "TestTimeout": 300,
+      "RetryCount": 1,
+      "RetryDelay": 2000
+    },
+
+    "MacRanges": [
+      { "start": "DC:EE:00:00:00:01", "end": "DC:EE:00:FF:FF:FF" }
+    ],
+
+    "Connections": {
+      "Primary": {
+        "Type": "Serial",
+        "BaudRate": 921600,
+        "DataBits": 8,
+        "StopBits": 1,
+        "Parity": "None"
+      }
+    },
+
+    "CommunicationEndpoints": {
+      "SerialPorts": [
+        "COM3", "COM4", "COM5", "COM6"
+      ]
+    },
+
+    "NamingConfig": {
+      "Template": "PCBA工位{Index}",
+      "IdTemplate": "PCBA-{Index}"
+    }
+  },
+
+  "TestProjectConfiguration": {
+    "TestMode": {
+      "Id": "pcba_test",
+      "Name": "PCBA 板级测试",
+      "Icon": "🔬",
+      "Description": "多仪器联合 PCBA 测试流程",
+      "DefaultTimeout": 300000,
+      "EnableParallel": false,
+      "MaxRetries": 1
+    },
+
+    "TestProject": {
+      "Id": "pcba_multi_instrument",
+      "Name": "PCBA 全自动仪器测试",
+      "Description": "电源/万用表/示波器/频谱仪联合测试",
+      "Enabled": true,
+      "Steps": [
+        {
+          "Id": "step_psu_setup",
+          "Name": "可编程电源设置",
+          "Description": "设置电源输出电压 3.3V / 限流 1A",
+          "Order": 1,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "SOURce:VOLTage:LEVel 3.3;SOURce:CURRent:LIMit 1.0",
+          "Expected": "",
+          "Timeout": 3000,
+          "Delay": 500,
+          "Channel": "scpi",
+          "TargetDeviceId": "psu_01",
+          "Parameters": {
+            "InstrumentAddress": "192.168.1.50:5025"
+          }
+        },
+        {
+          "Id": "step_psu_on",
+          "Name": "电源输出开启",
+          "Description": "开启电源输出",
+          "Order": 2,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "OUTPut:STATe ON",
+          "Expected": "",
+          "Timeout": 3000,
+          "Delay": 2000,
+          "Channel": "scpi",
+          "TargetDeviceId": "psu_01",
+          "Parameters": {
+            "InstrumentAddress": "192.168.1.50:5025"
+          }
+        },
+        {
+          "Id": "step_voltage_verify",
+          "Name": "输出电压校验",
+          "Description": "用万用表测量实际输出电压",
+          "Order": 3,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "MEASure:VOLTage:DC? AUTO",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 1000,
+          "Channel": "scpi",
+          "TargetDeviceId": "dmm_01",
+          "StoreResultAs": "actualVoltage",
+          "Parameters": {
+            "InstrumentAddress": "192.168.1.51:5025"
+          },
+          "ValidationRules": {
+            "NumericRange": { "Min": 3.2, "Max": 3.4 }
+          }
+        },
+        {
+          "Id": "step_current_measure",
+          "Name": "工作电流测量",
+          "Description": "测量 DUT 上电后的工作电流",
+          "Order": 4,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "MEASure:CURRent:DC? AUTO",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 1000,
+          "Channel": "scpi",
+          "TargetDeviceId": "dmm_01",
+          "StoreResultAs": "workingCurrent",
+          "Parameters": {
+            "InstrumentAddress": "192.168.1.51:5025"
+          },
+          "ValidationRules": {
+            "NumericRange": { "Min": 0.05, "Max": 0.5 }
+          }
+        },
+        {
+          "Id": "step_dut_boot",
+          "Name": "DUT 启动检测",
+          "Description": "等待 DUT 串口输出启动完成标志",
+          "Order": 5,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "",
+          "Expected": "contains:ready",
+          "Timeout": 15000,
+          "Delay": 3000,
+          "Channel": "Serial",
+          "Parameters": {
+            "MockOutput": "system ready"
+          }
+        },
+        {
+          "Id": "step_crystal_freq",
+          "Name": "晶振频率测量",
+          "Description": "用示波器测量主晶振频率（应为 26MHz ± 50ppm）",
+          "Order": 6,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "MEASure:FREQuency? CHANnel1",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 1000,
+          "Channel": "scpi",
+          "TargetDeviceId": "scope_01",
+          "StoreResultAs": "crystalFreq",
+          "Parameters": {
+            "InstrumentAddress": "192.168.1.52:5025"
+          },
+          "ValidationRules": {
+            "NumericRange": { "Min": 25998700, "Max": 26001300 }
+          }
+        },
+        {
+          "Id": "step_clock_jitter",
+          "Name": "时钟抖动测量",
+          "Description": "测量时钟信号相位抖动",
+          "Order": 7,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "MEASure:JITTer? CHANnel1",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "scpi",
+          "TargetDeviceId": "scope_01",
+          "StoreResultAs": "clockJitter",
+          "Parameters": {
+            "InstrumentAddress": "192.168.1.52:5025"
+          },
+          "ValidationRules": {
+            "NumericRange": { "Min": 0.0, "Max": 50e-12 }
+          }
+        },
+        {
+          "Id": "step_rf_tx_power",
+          "Name": "射频发射功率测量",
+          "Description": "DUT 发射 2.4GHz 连续载波，频谱仪测量功率",
+          "Order": 8,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "rf_tx_cw 2412 18",
+          "Expected": "contains:tx on",
+          "Timeout": 5000,
+          "Delay": 2000,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_rf_power_measure",
+          "Name": "射频功率读取",
+          "Description": "从频谱仪读取峰值功率",
+          "Order": 9,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "CALCulate:MARKer1:Y?",
+          "Expected": "",
+          "Timeout": 5000,
+          "Delay": 1000,
+          "Channel": "scpi",
+          "TargetDeviceId": "spectrum_01",
+          "StoreResultAs": "txPower",
+          "Parameters": {
+            "InstrumentAddress": "192.168.1.53:5025"
+          },
+          "ValidationRules": {
+            "NumericRange": { "Min": 15.0, "Max": 21.0 }
+          }
+        },
+        {
+          "Id": "step_rf_stop",
+          "Name": "停止射频发射",
+          "Description": "关闭连续载波",
+          "Order": 10,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "rf_tx_stop",
+          "Expected": "contains:tx off",
+          "Timeout": 3000,
+          "Delay": 500,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_rf_rx_sensitivity",
+          "Name": "射频接收灵敏度测试",
+          "Description": "信号源发射 -80dBm 信号，DUT 测量 PER",
+          "Order": 11,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "rf_rx_per 2412 1000",
+          "Expected": "",
+          "Timeout": 15000,
+          "Delay": 2000,
+          "Channel": "Serial",
+          "StoreResultAs": "rxPer",
+          "ValidationRules": {
+            "NumericRange": { "Min": 0.0, "Max": 10.0 }
+          }
+        },
+        {
+          "Id": "step_write_mac",
+          "Name": "写入 MAC 地址",
+          "Description": "烧录 WiFi MAC 地址",
+          "Order": 12,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "efuse write_mac {{macAddress}}",
+          "Expected": "contains:write ok",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial"
+        },
+        {
+          "Id": "step_write_cal_data",
+          "Name": "写入射频校准数据",
+          "Description": "将发射功率校准补偿值写入 eFuse",
+          "Order": 13,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "efuse write_txcal {{txPower}}",
+          "Expected": "contains:calibration saved",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "ConditionExpression": "exists:txPower"
+        },
+        {
+          "Id": "step_psu_off",
+          "Name": "电源关闭",
+          "Description": "测试结束关闭电源输出",
+          "Order": 14,
+          "Enabled": true,
+          "Target": "instrument",
+          "Type": "instrument",
+          "Command": "OUTPut:STATe OFF",
+          "Expected": "",
+          "Timeout": 3000,
+          "Delay": 500,
+          "Channel": "scpi",
+          "TargetDeviceId": "psu_01",
+          "Parameters": {
+            "InstrumentAddress": "192.168.1.50:5025"
+          }
+        }
+      ]
+    }
+  }
+}

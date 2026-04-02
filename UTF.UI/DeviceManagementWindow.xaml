@@ -1,0 +1,363 @@
+<Window x:Class="UTF.UI.DeviceManagementWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="设备管理 - Universal Test Framework" 
+        Height="700" Width="1000" 
+        WindowStartupLocation="CenterScreen"
+        Background="#F5F5F5">
+    
+    <Window.Resources>
+        <!-- 按钮样式 -->
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="3"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="4" 
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                            VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- 标题和工具栏 -->
+        <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="20" Margin="0,0,0,10">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+            </Border.Effect>
+            
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- 标题 -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="🔧" FontSize="24" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="设备管理中心" FontSize="20" FontWeight="Bold" Foreground="#2C3E50" VerticalAlignment="Center"/>
+                    <Border Background="#3498DB" CornerRadius="10" Padding="8,2" Margin="15,0,0,0">
+                        <TextBlock x:Name="DeviceCountText" Text="设备总数: 0" Foreground="White" FontSize="12" FontWeight="Bold"/>
+                    </Border>
+                </StackPanel>
+                
+                <!-- 工具按钮 -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="RefreshBtn" Content="🔄 刷新" Style="{StaticResource ActionButton}" Background="#3498DB" Click="RefreshBtn_Click"/>
+                    <Button x:Name="AddDeviceBtn" Content="➕ 添加设备" Style="{StaticResource ActionButton}" Background="#27AE60" Click="AddDeviceBtn_Click"/>
+                    <Button x:Name="ScanDevicesBtn" Content="🔍 扫描设备" Style="{StaticResource ActionButton}" Background="#F39C12" Click="ScanDevicesBtn_Click"/>
+                    <Button x:Name="ImportConfigBtn" Content="📥 导入配置" Style="{StaticResource ActionButton}" Background="#9B59B6" Click="ImportConfigBtn_Click"/>
+                    <Button x:Name="ExportConfigBtn" Content="📤 导出配置" Style="{StaticResource ActionButton}" Background="#34495E" Click="ExportConfigBtn_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        
+        <!-- 主内容区域 -->
+        <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
+            <!-- 仪器设备标签页 -->
+            <TabItem Header="🔬 仪器设备">
+                <Border Background="White" CornerRadius="8" Margin="0,5,0,0">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+                    </Border.Effect>
+                    
+                    <Grid Margin="15">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- 仪器设备筛选 -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="筛选:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <ComboBox x:Name="InstrumentTypeCombo" Width="120" Margin="0,0,10,0">
+                                <ComboBoxItem Content="全部类型" IsSelected="True"/>
+                                <ComboBoxItem Content="万用表"/>
+                                <ComboBoxItem Content="电源"/>
+                                <ComboBoxItem Content="示波器"/>
+                                <ComboBoxItem Content="信号发生器"/>
+                                <ComboBoxItem Content="频谱分析仪"/>
+                            </ComboBox>
+                            
+                            <ComboBox x:Name="InstrumentStatusCombo" Width="100" Margin="0,0,10,0">
+                                <ComboBoxItem Content="全部状态" IsSelected="True"/>
+                                <ComboBoxItem Content="在线"/>
+                                <ComboBoxItem Content="离线"/>
+                                <ComboBoxItem Content="故障"/>
+                            </ComboBox>
+                            
+                            <Button Content="应用筛选" Style="{StaticResource ActionButton}" Background="#3498DB" Click="ApplyInstrumentFilter_Click"/>
+                        </StackPanel>
+                        
+                        <!-- 仪器设备列表 -->
+                        <DataGrid Grid.Row="1" x:Name="InstrumentDataGrid" 
+                                AutoGenerateColumns="False" 
+                                CanUserAddRows="False"
+                                CanUserDeleteRows="False"
+                                GridLinesVisibility="Horizontal"
+                                HeadersVisibility="Column"
+                                AlternatingRowBackground="#F8F9FA">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="设备ID" Binding="{Binding DeviceId}" Width="100"/>
+                                <DataGridTextColumn Header="设备名称" Binding="{Binding DeviceName}" Width="150"/>
+                                <DataGridTextColumn Header="设备类型" Binding="{Binding DeviceType}" Width="120"/>
+                                <DataGridTextColumn Header="制造商" Binding="{Binding Manufacturer}" Width="100"/>
+                                <DataGridTextColumn Header="型号" Binding="{Binding Model}" Width="120"/>
+                                <DataGridTextColumn Header="连接方式" Binding="{Binding ConnectionType}" Width="100"/>
+                                <DataGridTextColumn Header="连接地址" Binding="{Binding ConnectionAddress}" Width="150"/>
+                                <DataGridTemplateColumn Header="状态" Width="80">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border CornerRadius="3" Padding="5,2">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Status}" Value="在线">
+                                                                <Setter Property="Background" Value="#27AE60"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="离线">
+                                                                <Setter Property="Background" Value="#95A5A6"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="故障">
+                                                                <Setter Property="Background" Value="#E74C3C"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding Status}" Foreground="White" FontWeight="Bold" TextAlignment="Center"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="操作" Width="200">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Content="连接" Style="{StaticResource ActionButton}" Background="#3498DB" Width="45" Click="ConnectDevice_Click"/>
+                                                <Button Content="配置" Style="{StaticResource ActionButton}" Background="#F39C12" Width="45" Click="ConfigDevice_Click"/>
+                                                <Button Content="校准" Style="{StaticResource ActionButton}" Background="#9B59B6" Width="45" Click="CalibrateDevice_Click"/>
+                                                <Button Content="删除" Style="{StaticResource ActionButton}" Background="#E74C3C" Width="45" Click="DeleteDevice_Click"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </TabItem>
+            
+            <!-- DUT设备标签页 -->
+            <TabItem Header="📱 DUT设备">
+                <Border Background="White" CornerRadius="8" Margin="0,5,0,0">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+                    </Border.Effect>
+                    
+                    <Grid Margin="15">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- DUT设备筛选 -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="筛选:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <ComboBox x:Name="DutTypeCombo" Width="120" Margin="0,0,10,0">
+                                <ComboBoxItem Content="全部类型" IsSelected="True"/>
+                                <ComboBoxItem Content="手机"/>
+                                <ComboBoxItem Content="平板"/>
+                                <ComboBoxItem Content="笔记本"/>
+                                <ComboBoxItem Content="汽车ECU"/>
+                                <ComboBoxItem Content="传感器"/>
+                            </ComboBox>
+                            
+                            <ComboBox x:Name="DutStatusCombo" Width="100" Margin="0,0,10,0">
+                                <ComboBoxItem Content="全部状态" IsSelected="True"/>
+                                <ComboBoxItem Content="就绪"/>
+                                <ComboBoxItem Content="测试中"/>
+                                <ComboBoxItem Content="故障"/>
+                                <ComboBoxItem Content="离线"/>
+                            </ComboBox>
+                            
+                            <Button Content="应用筛选" Style="{StaticResource ActionButton}" Background="#3498DB" Click="ApplyDutFilter_Click"/>
+                        </StackPanel>
+                        
+                        <!-- DUT设备列表 -->
+                        <DataGrid Grid.Row="1" x:Name="DutDataGrid" 
+                                AutoGenerateColumns="False" 
+                                CanUserAddRows="False"
+                                CanUserDeleteRows="False"
+                                GridLinesVisibility="Horizontal"
+                                HeadersVisibility="Column"
+                                AlternatingRowBackground="#F8F9FA">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="DUT ID" Binding="{Binding DutId}" Width="100"/>
+                                <DataGridTextColumn Header="DUT名称" Binding="{Binding DutName}" Width="150"/>
+                                <DataGridTextColumn Header="DUT类型" Binding="{Binding DutType}" Width="120"/>
+                                <DataGridTextColumn Header="制造商" Binding="{Binding Manufacturer}" Width="100"/>
+                                <DataGridTextColumn Header="型号" Binding="{Binding Model}" Width="120"/>
+                                <DataGridTextColumn Header="通信方式" Binding="{Binding CommunicationType}" Width="100"/>
+                                <DataGridTextColumn Header="连接参数" Binding="{Binding ConnectionParams}" Width="150"/>
+                                <DataGridTemplateColumn Header="状态" Width="80">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border CornerRadius="3" Padding="5,2">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Status}" Value="就绪">
+                                                                <Setter Property="Background" Value="#27AE60"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="测试中">
+                                                                <Setter Property="Background" Value="#F39C12"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="故障">
+                                                                <Setter Property="Background" Value="#E74C3C"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="离线">
+                                                                <Setter Property="Background" Value="#95A5A6"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding Status}" Foreground="White" FontWeight="Bold" TextAlignment="Center"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="操作" Width="200">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Content="连接" Style="{StaticResource ActionButton}" Background="#3498DB" Width="45" Click="ConnectDut_Click"/>
+                                                <Button Content="配置" Style="{StaticResource ActionButton}" Background="#F39C12" Width="45" Click="ConfigDut_Click"/>
+                                                <Button Content="测试" Style="{StaticResource ActionButton}" Background="#27AE60" Width="45" Click="TestDut_Click"/>
+                                                <Button Content="删除" Style="{StaticResource ActionButton}" Background="#E74C3C" Width="45" Click="DeleteDut_Click"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </TabItem>
+            
+            <!-- 设备配置标签页 -->
+            <TabItem Header="⚙️ 设备配置">
+                <Border Background="White" CornerRadius="8" Margin="0,5,0,0">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+                    </Border.Effect>
+                    
+                    <ScrollViewer Margin="20">
+                        <StackPanel>
+                            <TextBlock Text="全局设备配置" FontSize="18" FontWeight="Bold" Foreground="#2C3E50" Margin="0,0,0,15"/>
+                            
+                            <!-- 连接超时设置 -->
+                            <GroupBox Header="连接设置" Margin="0,0,0,15">
+                                <Grid Margin="10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="200"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="连接超时(秒):" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="ConnectionTimeoutTextBox" Text="30" Margin="0,0,10,5"/>
+                                    
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="重试次数:" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Row="1" Grid.Column="1" x:Name="RetryCountTextBox" Text="3" Margin="0,0,10,5"/>
+                                    
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="自动重连:" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Row="2" Grid.Column="1" x:Name="AutoReconnectCheckBox" IsChecked="True" Margin="0,5"/>
+                                </Grid>
+                            </GroupBox>
+                            
+                            <!-- 日志设置 -->
+                            <GroupBox Header="日志设置" Margin="0,0,0,15">
+                                <Grid Margin="10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="200"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="日志级别:" VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Row="0" Grid.Column="1" x:Name="LogLevelCombo" Margin="0,0,10,5">
+                                        <ComboBoxItem Content="Debug"/>
+                                        <ComboBoxItem Content="Info" IsSelected="True"/>
+                                        <ComboBoxItem Content="Warning"/>
+                                        <ComboBoxItem Content="Error"/>
+                                    </ComboBox>
+                                    
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="启用设备日志:" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Row="1" Grid.Column="1" x:Name="EnableDeviceLogCheckBox" IsChecked="True" Margin="0,5"/>
+                                </Grid>
+                            </GroupBox>
+                            
+                            <!-- 保存按钮 -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="💾 保存配置" Style="{StaticResource ActionButton}" Background="#27AE60" Click="SaveConfig_Click"/>
+                                <Button Content="🔄 重置默认" Style="{StaticResource ActionButton}" Background="#E74C3C" Click="ResetConfig_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </TabItem>
+        </TabControl>
+        
+        <!-- 状态栏 -->
+        <Border Grid.Row="2" Background="White" CornerRadius="8" Padding="15,10" Margin="0,10,0,0">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+            </Border.Effect>
+            
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <TextBlock x:Name="StatusTextBlock" Grid.Column="0" Text="就绪" VerticalAlignment="Center"/>
+                
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="关闭" Style="{StaticResource ActionButton}" Background="#95A5A6" Click="CloseBtn_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

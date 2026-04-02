@@ -1,0 +1,20 @@
+{
+  "pluginId": "utf.driver.telnet",
+  "name": "UTF Telnet Driver",
+  "version": "1.0.0",
+  "pluginApiVersion": "1.0",
+  "entryAssembly": "UTF.Plugins.Drivers.dll",
+  "entryType": "UTF.Plugins.Drivers.TelnetDriverPlugin",
+  "supportedStepTypes": ["network", "telnet", "tcp"],
+  "supportedChannels": ["network", "telnet", "tcp"],
+  "priority": 10,
+  "publisher": "UTF",
+  "frameworkVersion": "net10.0",
+  "settings": {
+    "Port": "23",
+    "ReadTimeoutMs": "3000",
+    "LineEnding": "\\r\\n",
+    "PromptPattern": ">",
+    "Encoding": "utf8"
+  }
+}

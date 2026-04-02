@@ -1,0 +1,13 @@
+{
+  "admin": {
+    "Username": "admin",
+    "DisplayName": "系统管理员",
+    "Email": "admin@utf.com",
+    "PasswordHash": "F0XrmuqA0a/z56sV+S8N0D+628dfZeDag1RBiQs1vz8=",
+    "Role": 0,
+    "CustomPermissions": [],
+    "CreatedAt": "2025-10-14T20:10:45.6755108+08:00",
+    "LastLoginAt": "2025-10-15T11:18:55.0873909+08:00",
+    "IsActive": true
+  }
+}

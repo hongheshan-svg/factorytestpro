@@ -1,0 +1,354 @@
+<Window x:Class="UTF.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:UTF.UI"
+        xmlns:converters="clr-namespace:UTF.UI.Converters"
+        xmlns:loc="clr-namespace:UTF.UI.Localization"
+        Title="通用自动化测试平台" 
+        Height="900" Width="1400" WindowStartupLocation="CenterScreen">
+    
+    <!-- 资源字典 -->
+    <Window.Resources>
+        <!-- 转换器 -->
+        <local:TestResultToColorConverter x:Key="ResultToColorConverter"/>
+        <local:TestResultToBackgroundConverter x:Key="ResultToBackgroundConverter"/>
+        <local:TestStatusToColorConverter x:Key="StatusToColorConverter"/>
+        <local:DutCountToColorConverter x:Key="DutCountToColorConverter"/>
+        <converters:LogLevelToColorConverter x:Key="LogLevelToColorConverter"/>
+        
+        <!-- 测试结果样式 -->
+        <Style x:Key="PassResultStyle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="Green"/>
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        
+        <Style x:Key="FailResultStyle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="Red"/>
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        
+        <Style x:Key="RunningResultStyle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="Orange"/>
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        
+        <Style x:Key="WaitingResultStyle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Foreground" Value="Gray"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+    </Window.Resources>
+    
+    <Grid Background="{StaticResource BackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="60"/>
+            <RowDefinition Height="60"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="30"/>
+        </Grid.RowDefinitions>
+        
+        <!-- 菜单栏 -->
+        <Menu Grid.Row="0" Background="White" BorderBrush="#FFE0E0E0" BorderThickness="0,0,0,1">
+            <MenuItem Header="文件(_F)">
+                <MenuItem Header="导入配置(_I)" Click="ImportConfig_Click"/>
+                <Separator/>
+                <MenuItem Header="退出(_X)" Click="ExitApp_Click"/>
+            </MenuItem>
+            <MenuItem Header="配置(_C)">
+                <MenuItem Header="配置管理中心(_M)" Click="OpenConfigCenter_Click"/>
+                <Separator/>
+                <MenuItem Header="导入配置(_I)" Click="ImportConfig_Click"/>
+            </MenuItem>
+            <MenuItem Header="工具(_T)">
+                <MenuItem Header="🚀 快速创建测试(_Q)" Click="OpenQuickTestWizard_Click" FontWeight="SemiBold"/>
+                <Separator/>
+                <MenuItem Header="插件管理(_P)" Click="OpenPluginManager_Click"/>
+                <MenuItem Header="设备管理(_D)" Click="OpenDeviceManager_Click"/>
+                <MenuItem Header="用户管理(_U)" Click="OpenUserManager_Click"/>
+                <Separator/>
+                <MenuItem Header="测试计划编辑器(_E)" Click="OpenTestPlanEditor_Click"/>
+                <MenuItem Header="配置管理中心(_C)" Click="OpenConfigCenter_Click"/>
+            </MenuItem>
+        </Menu>
+        
+        <!-- 标题栏 -->
+        <Border Grid.Row="1">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="#1565C0" Offset="0"/>
+                    <GradientStop Color="#0D47A1" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            <Grid Margin="20,0">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                    <TextBlock Text="⚡" FontSize="20" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="通用自动化测试平台" FontSize="18" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                    <Border Background="#1976D2" CornerRadius="12" Padding="10,3" Margin="20,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Name="UserInfoText" Text="用户: 管理员" Foreground="White" FontSize="11"/>
+                    </Border>
+                    <Border Background="#1976D2" CornerRadius="12" Padding="10,3" Margin="8,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Name="StationInfoText" Text="站台: 测试站01" Foreground="White" FontSize="11"/>
+                    </Border>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
+                    <TextBlock Name="ProductModelText" Text="产品型号: 加载中..." Foreground="#FFE082" FontSize="15" FontWeight="SemiBold"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        
+        <!-- 工具栏 -->
+        <Border Grid.Row="2" Background="White" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" Margin="16,0" VerticalAlignment="Center">
+                <Button Name="StartTestBtn" Content="▶  开始测试" Padding="18,9" FontSize="13" FontWeight="SemiBold"
+                        Background="{StaticResource SuccessBrush}" Click="StartTestBtn_Click"/>
+                <Button Name="StopTestBtn" Content="⏹  停止测试" Padding="18,9" FontSize="13" FontWeight="SemiBold"
+                        Background="{StaticResource WarnBrush}" Margin="8,0,0,0" Click="StopTestBtn_Click"/>
+                <Rectangle Width="1" Fill="#E0E0E0" Margin="16,8"/>
+                <Button Content="🚀 快速创建测试" Padding="14,8" FontSize="12" FontWeight="SemiBold"
+                        Background="#007ACC" Foreground="White" BorderThickness="0" Cursor="Hand"
+                        Click="OpenQuickTestWizard_Click" ToolTip="向导式快速创建测试配置"/>
+                <Rectangle Width="1" Fill="#E0E0E0" Margin="16,8"/>
+                <TextBlock Text="状态:" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,6,0"/>
+                <Border VerticalAlignment="Center" Background="#E8F5E9" CornerRadius="10" Padding="10,3">
+                    <TextBlock Name="StatusText" Text="系统就绪" Foreground="#2E7D32" FontWeight="SemiBold" FontSize="12"/>
+                </Border>
+                <Rectangle Width="1" Fill="#E0E0E0" Margin="16,8"/>
+                <!-- 步骤预览 Badge -->
+                <Border x:Name="StepPreviewBorder" Background="#F0F4FF" CornerRadius="6"
+                        Padding="8,4" VerticalAlignment="Center"
+                        Cursor="Hand" MouseLeftButtonUp="ToggleStepPreview_Click">
+                    <Border.ToolTip>
+                        <ToolTip x:Name="StepPreviewTooltip" Placement="Bottom">
+                            <StackPanel x:Name="StepPreviewPanel" MinWidth="260" MaxHeight="300">
+                                <TextBlock Text="测试步骤序列" FontWeight="SemiBold" FontSize="12"
+                                           Foreground="#1565C0" Margin="0,0,0,6"/>
+                                <ItemsControl x:Name="StepPreviewList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" FontSize="11" Margin="0,1"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ToolTip>
+                    </Border.ToolTip>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="📋 测试步骤:" FontSize="11" Foreground="#1565C0" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="StepCountText" Text="0步" FontSize="11" FontWeight="Bold" Foreground="#1565C0"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+        
+        <!-- 主界面内容 - 简化版 -->
+        <Grid Grid.Row="3" Margin="10">
+            
+            <!-- DUT列表监控区域 -->
+            <Border Background="White" CornerRadius="8" Margin="5">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+                </Border.Effect>
+                
+    <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- 控制面板 -->
+                    <Border Grid.Row="0" Background="#495057" Padding="10,8">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🎛️ DUT监控台" FontSize="12" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                            
+                            <TextBlock Text="使用上方工具栏进行测试控制" FontSize="10" Foreground="#ADB5BD" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                            
+                            <Button Content="🔄 刷新" Margin="3,0" Padding="8,4" FontSize="10" Click="RefreshDUTsBtn_Click"/>
+                            <Button Content="📤 导出报告" Margin="3,0" Padding="8,4" FontSize="10" Click="ExportReportBtn_Click"/>
+                            <Button Content="🗑️ 清除日志" Margin="3,0" Padding="8,4" FontSize="10" Click="ClearAllLogsBtn_Click"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <!-- DUT列表（内置滚动优化） -->
+                    <DataGrid Grid.Row="1" x:Name="MainDUTListDataGrid" 
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column"
+                              AlternatingRowBackground="#F8F9FA"
+                              SelectionMode="Single"
+                              FontSize="10"
+                              RowHeight="35"
+                              EnableRowVirtualization="True"
+                              EnableColumnVirtualization="True"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              VirtualizingPanel.CacheLength="10,10"
+                              VirtualizingPanel.CacheLengthUnit="Item"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto">
+                        
+                        <DataGrid.Columns>
+                            <!-- DUT信息列 -->
+                            <DataGridTemplateColumn Header="DUT信息" Width="140">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="3">
+                                            <TextBlock Text="{Binding DutId}" FontWeight="Bold" FontSize="10"/>
+                                            <TextBlock Text="{Binding DutName}" FontSize="8" Foreground="#6C757D"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            
+                            <!-- 整体结果列 -->
+                            <DataGridTemplateColumn Header="综合结果" Width="140" MinWidth="120">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{Binding OverallStatusBrush}" CornerRadius="5" Padding="6,3" Margin="2">
+                                            <TextBlock Text="{Binding OverallResultText}" 
+                                                     Foreground="White" 
+                                                     FontWeight="Bold" 
+                                                     FontSize="11"
+                                                     TextAlignment="Center"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            
+                            <!-- 当前步骤列 -->
+                            <DataGridTemplateColumn Header="当前步骤" Width="140" MinWidth="120">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding CurrentStepText}" FontWeight="Bold" FontSize="9" Margin="3" VerticalAlignment="Center"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            
+                            <!-- 动态测试步骤列将在代码中生成 -->
+                            
+                            <!-- 最新日志列 - 使用剩余空间并保持在最右边 -->
+                            <DataGridTemplateColumn Header="最新日志 (右键操作)" Width="*" MinWidth="300">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="3" Background="#F8F9FA" CornerRadius="3">
+                                            <Border.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="📝 查看完整日志" Click="ViewDUTLogBtn_Click"/>
+                                                    <MenuItem Header="📊 详细信息" Click="ViewDUTDetailBtn_Click"/>
+                                                    <Separator/>
+                                                    <MenuItem Header="🔧 重新测试" Click="RetestDUTBtn_Click"/>
+                                                </ContextMenu>
+                                            </Border.ContextMenu>
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" MaxHeight="30">
+                                                <ItemsControl ItemsSource="{Binding RecentLogs}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding DisplayText}" 
+                                                                     FontFamily="Consolas" 
+                                                                     FontSize="8" 
+                                                                     Foreground="{Binding Level, Converter={StaticResource LogLevelToColorConverter}}"
+                                                                     TextWrapping="Wrap"
+                                                                     TextTrimming="CharacterEllipsis"
+                                                                     Margin="0,0,0,1"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </ScrollViewer>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    
+                </Grid>
+            </Border>
+            
+        </Grid>
+        
+        <!-- 状态栏 -->
+        <Border Grid.Row="4" Background="#0D47A1">
+            <Grid Margin="5,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- 左侧系统状态 -->
+                <TextBlock Name="StatusTextFooter" Text="系统就绪" Foreground="White" VerticalAlignment="Center" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                
+                <!-- DUT测试统计 (支持千万级数字显示) -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0">
+                    <TextBlock Text="📊 DUT统计:" Foreground="#B0B0B0" FontSize="11" Margin="0,0,12,0"/>
+                    
+                    <TextBlock Text="总:" Foreground="#B0B0B0" FontSize="11" Margin="0,0,2,0"/>
+                    <TextBlock Name="TotalDUTsText" Text="0" Foreground="White" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
+                    
+                    <TextBlock Text="|" Foreground="#B0B0B0" FontSize="11" Margin="6,0"/>
+                    <TextBlock Text="测试中:" Foreground="#F39C12" FontSize="11" Margin="0,0,2,0"/>
+                    <TextBlock Name="RunningDUTsText" Text="0" Foreground="#F39C12" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
+                    
+                    <TextBlock Text="|" Foreground="#B0B0B0" FontSize="11" Margin="6,0"/>
+                    <TextBlock Text="等待:" Foreground="#6C757D" FontSize="11" Margin="0,0,2,0"/>
+                    <TextBlock Name="WaitingDUTsText" Text="0" Foreground="#B0B0B0" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
+                    
+                    <TextBlock Text="|" Foreground="#B0B0B0" FontSize="11" Margin="6,0"/>
+                    <TextBlock Text="✅合格:" Foreground="#28A745" FontSize="11" Margin="0,0,2,0"/>
+                    <TextBlock Name="PassedDUTsText" Text="0" Foreground="#28A745" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
+                    
+                    <TextBlock Text="|" Foreground="#B0B0B0" FontSize="11" Margin="6,0"/>
+                    <TextBlock Text="❌不合格:" Foreground="#DC3545" FontSize="11" Margin="0,0,2,0"/>
+                    <TextBlock Name="FailedDUTsText" Text="0" Foreground="#DC3545" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
+                    
+                    <TextBlock Text="|" Foreground="#B0B0B0" FontSize="11" Margin="6,0"/>
+                    <TextBlock Text="通过率:" Foreground="#007BFF" FontSize="11" Margin="0,0,2,0"/>
+                    <TextBlock Name="PassRateMainText" Text="0%" Foreground="#007BFF" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="45" TextAlignment="Right"/>
+                </StackPanel>
+                
+                <!-- 测试时间统计 -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0">
+                    <TextBlock Text="测试时间:" Foreground="#B0B0B0" FontSize="11" Margin="0,0,4,0"/>
+                    <TextBlock Name="TestDurationText" Text="00:00:00" Foreground="White" FontWeight="Bold" FontSize="11"/>
+                    <TextBlock Text="|" Foreground="#B0B0B0" FontSize="11" Margin="8,0"/>
+                    <TextBlock Text="总测试:" Foreground="#B0B0B0" FontSize="11" Margin="0,0,4,0"/>
+                    <TextBlock Name="TotalTestsText" Text="0" Foreground="White" FontWeight="Bold" FontSize="11"/>
+                    <TextBlock Text="次" Foreground="#B0B0B0" FontSize="11" Margin="2,0,0,0"/>
+                </StackPanel>
+                
+                <!-- 插件状态 + 当前时间 -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border x:Name="PluginStatusBorder" Background="#27AE60" CornerRadius="10"
+                            Padding="8,2" Margin="0,0,10,0" Cursor="Hand"
+                            MouseLeftButtonUp="PluginStatus_Click"
+                            ToolTip="点击查看插件管理">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🔌" FontSize="11" Margin="0,0,4,0"/>
+                            <TextBlock x:Name="PluginStatusText" Text="插件: 加载中..."
+                                       Foreground="White" FontSize="11" FontWeight="Bold"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Name="DateTimeText" Text="2024-01-01 12:00:00" Foreground="White" FontSize="11" Margin="0,0,5,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

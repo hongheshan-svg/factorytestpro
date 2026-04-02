@@ -1,0 +1,416 @@
+<Window x:Class="UTF.UI.DUTTestListWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:UTF.UI"
+        xmlns:vm="clr-namespace:UTF.UI.ViewModels"
+        xmlns:converters="clr-namespace:UTF.UI.Converters"
+        Title="多DUT测试监控台" 
+        Height="900" Width="1400" 
+        WindowStartupLocation="CenterScreen"
+        Background="#F5F5F5">
+    
+    <Window.Resources>
+        <!-- 转换器 -->
+        <converters:BoolToExpanderConverter x:Key="BoolToExpanderConverter"/>
+        
+        <!-- 日志级别样式 -->
+        <Style x:Key="LogLevelStyle" TargetType="Border">
+            <Setter Property="CornerRadius" Value="2"/>
+            <Setter Property="Padding" Value="4,1"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Level}" Value="Debug">
+                    <Setter Property="Background" Value="#95A5A6"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Level}" Value="Info">
+                    <Setter Property="Background" Value="#3498DB"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Level}" Value="Warning">
+                    <Setter Property="Background" Value="#F39C12"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Level}" Value="Error">
+                    <Setter Property="Background" Value="#E74C3C"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Level}" Value="Critical">
+                    <Setter Property="Background" Value="#8E44AD"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        
+        <!-- 统计卡片样式 -->
+        <Style x:Key="StatCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="15,10"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="2*"/>
+            <RowDefinition Height="1*"/>
+        </Grid.RowDefinitions>
+        
+        <!-- 统计面板 -->
+        <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="20" Margin="0,0,0,10">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+            </Border.Effect>
+            
+            <StackPanel>
+                <TextBlock Text="📊 DUT测试统计面板" FontSize="16" FontWeight="Bold" Foreground="#2C3E50" Margin="0,0,0,15"/>
+                
+                <UniformGrid Columns="6">
+                    <Border Style="{StaticResource StatCardStyle}">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="总DUT" FontSize="12" Foreground="#6C757D" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding TotalDUTs}" FontSize="24" FontWeight="Bold" Foreground="#495057" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <Border Style="{StaticResource StatCardStyle}">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="测试中" FontSize="12" Foreground="#6C757D" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding RunningDUTs}" FontSize="24" FontWeight="Bold" Foreground="#F39C12" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <Border Style="{StaticResource StatCardStyle}">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="等待中" FontSize="12" Foreground="#6C757D" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding WaitingDUTs}" FontSize="24" FontWeight="Bold" Foreground="#6C757D" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <Border Style="{StaticResource StatCardStyle}">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="✅PASS" FontSize="12" Foreground="#6C757D" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding PassedDUTs}" FontSize="24" FontWeight="Bold" Foreground="#28A745" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <Border Style="{StaticResource StatCardStyle}">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="❌FAIL" FontSize="12" Foreground="#6C757D" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding FailedDUTs}" FontSize="24" FontWeight="Bold" Foreground="#DC3545" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <Border Style="{StaticResource StatCardStyle}">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="通过率" FontSize="12" Foreground="#6C757D" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding PassRate, StringFormat={}{0:F1}%}" FontSize="24" FontWeight="Bold" Foreground="#007BFF" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </UniformGrid>
+            </StackPanel>
+        </Border>
+        
+        <!-- 控制面板 -->
+        <Border Grid.Row="1" Background="White" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+            </Border.Effect>
+            
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="🎛️ 控制面板" FontSize="14" FontWeight="Bold" Foreground="#2C3E50" VerticalAlignment="Center" Margin="0,0,20,0"/>
+                
+                <Button x:Name="StartAllBtn" Content="🚀 开始全部" Margin="5,0" Padding="10,5" Background="#28A745" Foreground="White" Click="StartAllBtn_Click"/>
+                <Button x:Name="PauseAllBtn" Content="⏸️ 暂停全部" Margin="5,0" Padding="10,5" Background="#FFC107" Foreground="Black" Click="PauseAllBtn_Click"/>
+                <Button x:Name="StopAllBtn" Content="⏹️ 停止全部" Margin="5,0" Padding="10,5" Background="#DC3545" Foreground="White" Click="StopAllBtn_Click"/>
+                <Button x:Name="RefreshBtn" Content="🔄 刷新" Margin="5,0" Padding="10,5" Click="RefreshBtn_Click"/>
+                <Button x:Name="ExportReportBtn" Content="📤 导出报告" Margin="5,0" Padding="10,5" Click="ExportReportBtn_Click"/>
+                <Button x:Name="ClearLogsBtn" Content="🗑️ 清除日志" Margin="5,0" Padding="10,5" Click="ClearLogsBtn_Click"/>
+            </StackPanel>
+        </Border>
+        
+        <!-- DUT列表标题 -->
+        <Border Grid.Row="2" Background="#495057" CornerRadius="8,8,0,0" Padding="15,10">
+            <TextBlock Text="📋 DUT测试详细列表" FontSize="16" FontWeight="Bold" Foreground="White"/>
+        </Border>
+        
+        <!-- DUT列表 -->
+        <Border Grid.Row="3" Background="White" CornerRadius="0,0,8,8" BorderBrush="#DEE2E6" BorderThickness="1,0,1,1">
+            <DataGrid x:Name="DUTListDataGrid" 
+                      ItemsSource="{Binding DUTs}"
+                      SelectedItem="{Binding SelectedDUT}"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      GridLinesVisibility="Horizontal"
+                      HeadersVisibility="Column"
+                      AlternatingRowBackground="#F8F9FA"
+                      SelectionMode="Single"
+                      RowDetailsVisibilityMode="VisibleWhenSelected"
+                      FontSize="11">
+                
+                <DataGrid.Columns>
+                    <!-- 展开列 -->
+                    <DataGridTemplateColumn Header="展开" Width="50">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="{Binding IsExpanded, Converter={StaticResource BoolToExpanderConverter}}" 
+                                        Width="20" Height="20" 
+                                        Click="ExpandBtn_Click" 
+                                        Background="Transparent" 
+                                        BorderThickness="0"
+                                        FontSize="12"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    
+                    <!-- DUT信息列 -->
+                    <DataGridTemplateColumn Header="DUT信息" Width="150">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="5">
+                                    <TextBlock Text="{Binding DutId}" FontWeight="Bold" FontSize="12"/>
+                                    <TextBlock Text="{Binding DutName}" FontSize="10" Foreground="#6C757D"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    
+                    <!-- 整体状态列 -->
+                    <DataGridTemplateColumn Header="整体状态" Width="100">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="5">
+                                    <Border Background="{Binding OverallStatusBrush}" CornerRadius="3" Padding="6,2">
+                                        <TextBlock Text="{Binding OverallStatusText}" Foreground="White" FontWeight="Bold" FontSize="10" TextAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="{Binding DurationText}" FontSize="9" Foreground="#6C757D" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    
+                    <!-- 当前步骤列 -->
+                    <DataGridTemplateColumn Header="当前步骤" Width="120">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="5">
+                                    <TextBlock Text="{Binding CurrentStepText}" FontWeight="Bold" FontSize="11"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    
+                    <!-- 测试步骤列 - 动态生成 -->
+                    <DataGridTemplateColumn Header="步骤1-设备初始化" Width="100">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding Steps[0].StatusBrush}" CornerRadius="3" Padding="4,2" Margin="2">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Steps[0].StatusText}" Foreground="White" FontWeight="Bold" FontSize="9" TextAlignment="Center"/>
+                                        <TextBlock Text="{Binding Steps[0].Duration}" Foreground="White" FontSize="8" TextAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    
+                    <DataGridTemplateColumn Header="步骤2-连接测试" Width="100">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding Steps[1].StatusBrush}" CornerRadius="3" Padding="4,2" Margin="2">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Steps[1].StatusText}" Foreground="White" FontWeight="Bold" FontSize="9" TextAlignment="Center"/>
+                                        <TextBlock Text="{Binding Steps[1].Duration}" Foreground="White" FontSize="8" TextAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    
+                    <DataGridTemplateColumn Header="步骤3-功能测试" Width="100">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding Steps[2].StatusBrush}" CornerRadius="3" Padding="4,2" Margin="2">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Steps[2].StatusText}" Foreground="White" FontWeight="Bold" FontSize="9" TextAlignment="Center"/>
+                                        <TextBlock Text="{Binding Steps[2].Duration}" Foreground="White" FontSize="8" TextAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    
+                    <DataGridTemplateColumn Header="步骤4-性能测试" Width="100">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding Steps[3].StatusBrush}" CornerRadius="3" Padding="4,2" Margin="2">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Steps[3].StatusText}" Foreground="White" FontWeight="Bold" FontSize="9" TextAlignment="Center"/>
+                                        <TextBlock Text="{Binding Steps[3].Duration}" Foreground="White" FontSize="8" TextAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    
+                    <DataGridTemplateColumn Header="步骤5-稳定性测试" Width="100">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding Steps[4].StatusBrush}" CornerRadius="3" Padding="4,2" Margin="2">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Steps[4].StatusText}" Foreground="White" FontWeight="Bold" FontSize="9" TextAlignment="Center"/>
+                                        <TextBlock Text="{Binding Steps[4].Duration}" Foreground="White" FontSize="8" TextAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    
+                    <DataGridTemplateColumn Header="步骤6-生成报告" Width="100">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding Steps[5].StatusBrush}" CornerRadius="3" Padding="4,2" Margin="2">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Steps[5].StatusText}" Foreground="White" FontWeight="Bold" FontSize="9" TextAlignment="Center"/>
+                                        <TextBlock Text="{Binding Steps[5].Duration}" Foreground="White" FontSize="8" TextAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    
+                    <!-- 操作列 -->
+                    <DataGridTemplateColumn Header="操作" Width="120">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="2">
+                                    <Button Content="📝" ToolTip="查看日志" Width="20" Height="20" Margin="1" FontSize="10" Click="ViewLogBtn_Click"/>
+                                    <Button Content="📊" ToolTip="详细信息" Width="20" Height="20" Margin="1" FontSize="10" Click="ViewDetailBtn_Click"/>
+                                    <Button Content="⏸️" ToolTip="暂停" Width="20" Height="20" Margin="1" FontSize="10" Click="PauseBtn_Click"/>
+                                    <Button Content="🔧" ToolTip="重测" Width="20" Height="20" Margin="1" FontSize="10" Click="RetestBtn_Click"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+                
+                <!-- 行详细信息模板 - 显示最新日志 -->
+                <DataGrid.RowDetailsTemplate>
+                    <DataTemplate>
+                        <Border Background="#F8F9FA" Padding="15,10" Margin="10,0">
+                            <StackPanel>
+                                <TextBlock Text="📝 最新日志 (最近3条)" FontWeight="Bold" FontSize="12" Foreground="#495057" Margin="0,0,0,5"/>
+                                
+                                <ItemsControl ItemsSource="{Binding RecentLogs}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="0,2">
+                                                <TextBlock Text="{Binding TimeDisplay}" FontFamily="Consolas" FontSize="10" Foreground="#6C757D" Width="60"/>
+                                                
+                                                <Border Style="{StaticResource LogLevelStyle}">
+                                                    <TextBlock Text="{Binding LevelDisplay}" Foreground="White" FontWeight="Bold" FontSize="8"/>
+                                                </Border>
+                                                
+                                                <TextBlock Text="{Binding FullMessage}" FontFamily="Consolas" FontSize="10" Margin="10,0,0,0"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,5,0,0">
+                                    <Button Content="📝 查看完整日志" FontSize="10" Padding="6,3" Click="ViewFullLogBtn_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </DataGrid.RowDetailsTemplate>
+            </DataGrid>
+        </Border>
+        
+        <!-- 选中DUT详细信息面板 -->
+        <Border Grid.Row="4" Background="White" CornerRadius="8" Margin="0,10,0,0" Padding="15">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+            </Border.Effect>
+            
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1*"/>
+                    <ColumnDefinition Width="1*"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- 选中DUT信息 -->
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="📊 选中DUT详细信息" FontSize="14" FontWeight="Bold" Foreground="#2C3E50" Margin="0,0,0,10"/>
+                    
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5" DataContext="{Binding SelectedDUT}">
+                        <TextBlock Text="📱" FontSize="16" Margin="0,0,5,0"/>
+                        <TextBlock Text="{Binding DutId}" FontWeight="Bold" FontSize="14" Margin="0,0,5,0"/>
+                        <TextBlock Text="-" FontSize="14" Margin="0,0,5,0"/>
+                        <TextBlock Text="{Binding DutName}" FontSize="14" Margin="0,0,10,0"/>
+                        <Border Background="{Binding OverallStatusBrush}" CornerRadius="3" Padding="6,2">
+                            <TextBlock Text="{Binding OverallStatusText}" Foreground="White" FontWeight="Bold" FontSize="10"/>
+                        </Border>
+                    </StackPanel>
+                    
+                    <Grid Margin="0,10,0,0" DataContext="{Binding SelectedDUT}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="开始时间:" FontSize="11" Margin="0,0,10,3"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DUTInfo.StartTimeDisplay}" FontSize="11" Margin="0,0,0,3"/>
+                        
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="执行时长:" FontSize="11" Margin="0,0,10,3"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding DurationText}" FontSize="11" Margin="0,0,0,3"/>
+                        
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="当前进度:" FontSize="11" Margin="0,0,10,0"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CurrentStepText}" FontSize="11" FontWeight="Bold"/>
+                    </Grid>
+                </StackPanel>
+                
+                <!-- 实时日志 -->
+                <StackPanel Grid.Column="1" Margin="20,0,0,0">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="📝 实时日志" FontSize="14" FontWeight="Bold" Foreground="#2C3E50"/>
+                        <TextBlock Text="(自动滚动)" FontSize="10" Foreground="#6C757D" Margin="10,0,0,0" VerticalAlignment="Bottom"/>
+                    </StackPanel>
+                    
+                    <ScrollViewer Height="150" VerticalScrollBarVisibility="Auto" Background="#F8F9FA" Padding="5">
+                        <ItemsControl ItemsSource="{Binding SelectedDUTLogs}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,1">
+                                        <TextBlock Text="{Binding TimeDisplay}" FontFamily="Consolas" FontSize="9" Foreground="#6C757D" Width="50"/>
+                                        
+                                        <Border Style="{StaticResource LogLevelStyle}">
+                                            <TextBlock Text="{Binding LevelDisplay}" Foreground="White" FontWeight="Bold" FontSize="7"/>
+                                        </Border>
+                                        
+                                        <TextBlock Text="{Binding FullMessage}" FontFamily="Consolas" FontSize="9" Margin="5,0,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,5,0,0">
+                        <Button Content="🗑️ 清除" FontSize="10" Padding="6,3" Margin="0,0,5,0" Click="ClearSelectedLogBtn_Click"/>
+                        <Button Content="📤 导出" FontSize="10" Padding="6,3" Click="ExportSelectedLogBtn_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
