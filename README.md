@@ -71,6 +71,7 @@ dotnet test tests/UTF.Core.Tests/UTF.Core.Tests.csproj --logger "console;verbosi
 - Plugin layout and manifest reference: `plugins/README.md`
 - Test project notes: `tests/README.md`
 - Contribution guide: `CONTRIBUTING.md`
+- Factory user guide: `docs/factory-user-guide.md`
 
 ## Current Status
 
