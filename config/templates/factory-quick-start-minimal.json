@@ -1,0 +1,142 @@
+{
+  "ConfigurationInfo": {
+    "Name": "工厂快速上手最小配置",
+    "Version": "1.0.0",
+    "CreatedDate": "2026-04-03T00:00:00Z",
+    "Description": "用于新工厂或新产品首次跑通流程的最小可运行配置示例",
+    "Author": "UTF System"
+  },
+  "SystemSettings": {
+    "LogLevel": "Info",
+    "AutoSaveResults": true,
+    "ResultsPath": "./test-results",
+    "BackupEnabled": true,
+    "MaxLogFiles": 10,
+    "LogRotationSizeMB": 50,
+    "DefaultLanguage": "zh-CN",
+    "Theme": "Light",
+    "AutoRefresh": true,
+    "RefreshInterval": 2000
+  },
+  "DUTConfiguration": {
+    "ProductInfo": {
+      "Name": "示例产品",
+      "Model": "Demo-Product-1.0",
+      "Icon": "🔧",
+      "Category": "工厂快速导入",
+      "ExpectedSoftwareVersion": "APP_VERSION:1.0.0"
+    },
+    "GlobalSettings": {
+      "DefaultMaxConcurrent": 16,
+      "EnablePreTestCheck": true,
+      "DefaultVoltage": 3.8,
+      "DefaultCurrent": 0.5,
+      "TestTimeout": 120,
+      "RetryCount": 1,
+      "RetryDelay": 1000
+    },
+    "MacRanges": [
+      {
+        "start": "AA:BB:CC:00:00:00",
+        "end": "AA:BB:CC:00:00:FF"
+      }
+    ],
+    "Connections": {
+      "Primary": {
+        "Type": "Serial",
+        "BaudRate": 115200,
+        "DataBits": 8,
+        "StopBits": 1,
+        "Parity": "None"
+      }
+    },
+    "CommunicationEndpoints": {
+      "SerialPorts": [
+        "COM3",
+        "COM4",
+        "COM5",
+        "COM6",
+        "COM7",
+        "COM8",
+        "COM9",
+        "COM10",
+        "COM11",
+        "COM12",
+        "COM13",
+        "COM14",
+        "COM15",
+        "COM16",
+        "COM17",
+        "COM18"
+      ]
+    },
+    "NamingConfig": {
+      "Template": "{TypeName}测试工位{Index}",
+      "IdTemplate": "DUT-{Index}"
+    }
+  },
+  "TestProjectConfiguration": {
+    "TestMode": {
+      "Id": "production",
+      "Name": "快速导入验证",
+      "Icon": "🏭",
+      "Description": "用于首次接入时验证连通性、版本和基本结果链路",
+      "DefaultTimeout": 120000,
+      "EnableParallel": true,
+      "MaxRetries": 1
+    },
+    "TestProject": {
+      "Id": "factory_quick_start",
+      "Name": "工厂快速上手示例",
+      "Description": "最小可运行测试流程示例",
+      "Enabled": true,
+      "Steps": [
+        {
+          "Id": "step_cmd_connectivity",
+          "Name": "主机连通性检查",
+          "Description": "用本地命令验证工位基础执行链路是否可用",
+          "Order": 1,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "custom",
+          "Command": "echo STATION_OK",
+          "Expected": "contains:STATION_OK",
+          "Timeout": 3000,
+          "Delay": 200,
+          "Channel": "Cmd"
+        },
+        {
+          "Id": "step_serial_version",
+          "Name": "软件版本检查",
+          "Description": "通过串口读取版本信息",
+          "Order": 2,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "serial",
+          "Command": "version",
+          "Expected": "contains:APP_VERSION",
+          "Timeout": 5000,
+          "Delay": 500,
+          "Channel": "Serial",
+          "RetryCount": 1,
+          "StoreResultAs": "versionOutput"
+        },
+        {
+          "Id": "step_result_validation",
+          "Name": "结果链路校验",
+          "Description": "验证上一步结果是否已写入上下文变量",
+          "Order": 3,
+          "Enabled": true,
+          "Target": "dut",
+          "Type": "custom",
+          "Command": "echo ${versionOutput}",
+          "Expected": "contains:APP_VERSION",
+          "Timeout": 3000,
+          "Delay": 200,
+          "Channel": "Cmd",
+          "ConditionExpression": "exists:versionOutput"
+        }
+      ]
+    }
+  }
+}

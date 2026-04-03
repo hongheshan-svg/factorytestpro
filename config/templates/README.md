@@ -10,6 +10,7 @@
 | `consumer-electronics-android.json` | 消费电子 | Android 终端 | ADB (USB) | — |
 | `automotive-ecu-eol.json` | 汽车电子 | ECU 控制器 | Serial + SCPI | 电源/万用表 |
 | `instrument-integration-pcba.json` | PCBA 制造 | WiFi 射频模组 | Serial + SCPI | 电源/万用表/示波器/频谱仪 |
+| `factory-quick-start-minimal.json` | 通用导入 | 最小可运行样例 | Cmd + Serial | — |
 
 ## 使用方法
 
@@ -18,6 +19,8 @@
 3. 修改 `CommunicationEndpoints` 为实际串口/网络地址
 4. 修改各步骤的 `Parameters.InstrumentAddress` 为实际仪器地址
 5. 调整 `ValidationRules.NumericRange` 为实际测试规格
+
+如果你是第一次接入本平台，建议先使用 `factory-quick-start-minimal.json` 跑通最小链路，再切换到更完整的行业模板。
 
 ## v2.0 新特性
 
@@ -39,3 +42,18 @@
 | SCPI / LXI | `utf.driver.scpi` | 仪器控制（万用表/电源/示波器/频谱仪） |
 | ADB / Android | `utf.driver.adb` | Android Debug Bridge |
 | CMD / PowerShell | `utf.executor.cmd` | 本地命令行 |
+
+## 快速上手模板说明
+
+`factory-quick-start-minimal.json` 适合以下场景：
+
+- 新工厂第一次导入平台
+- 新产线先验证主机、插件和配置链路是否打通
+- 新产品先跑通最小步骤，再逐步增加复杂功能测试
+
+该模板包含三类最基本验证：
+
+- 本地命令执行链路验证
+- 串口版本读取验证
+- 上下文变量传递与条件执行验证
+

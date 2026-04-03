@@ -124,10 +124,23 @@ Universal Test Framework 适合以下场景：
 ### 新工厂第一次接入
 
 1. 先构建并运行主程序
-2. 准备一份最小可运行的 `unified-config.json`
+2. 先从 `config/templates/factory-quick-start-minimal.json` 准备一份最小可运行的 `unified-config.json`
 3. 只接入一台 DUT 跑通完整流程
 4. 再扩展到多台 DUT 并发运行
 5. 最后再增加插件、仪器或复杂验证逻辑
+
+## 快速上手配置样例
+
+如果你希望最快验证平台是否跑通，优先使用：
+
+- `config/templates/factory-quick-start-minimal.json`
+
+这个样例适合先验证以下内容：
+
+- 主机上的命令执行能力是否正常
+- 串口通信是否已接通
+- 测试结果能否写入并传递到后续步骤
+- 条件执行是否按预期生效
 
 ### 新产品导入
 
