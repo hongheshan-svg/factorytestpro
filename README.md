@@ -66,6 +66,7 @@ dotnet test tests/UTF.Core.Tests/UTF.Core.Tests.csproj --logger "console;verbosi
 
 ## Configuration And Plugins
 
+- Documentation home: `docs/index.md`
 - Main runtime configuration: `config/unified-config.json`
 - Configuration reference: `config/README.md`
 - Quick-start template: `config/templates/factory-quick-start-minimal.json`
