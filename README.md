@@ -84,4 +84,4 @@ dotnet test tests/UTF.Core.Tests/UTF.Core.Tests.csproj --logger "console;verbosi
 ## Notes
 
 - The repository is published at `hongheshan-svg/factorytestpro` and the local `main` branch tracks `origin/main`.
-- This repository is released under the MIT License. See `LICENSE` for the full text.
+- This repository is released under the GNU Affero General Public License v3.0 (`AGPL-3.0-only`). See `LICENSE` for the full text.
