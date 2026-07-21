@@ -32,6 +32,9 @@
     <!-- MVVM toolkit -->
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
 
+    <!-- PDF generation -->
+    <PackageVersion Include="QuestPDF" Version="2026.7.1" />
+
     <!-- Test SDK / xunit - pinned at currently-resolved versions -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />

@@ -15,6 +15,9 @@
     <ProjectReference Include="..\UTF.Logging\UTF.Logging.csproj" />
     <ProjectReference Include="..\UTF.Plugin.Host\UTF.Plugin.Host.csproj" />
     <ProjectReference Include="..\UTF.Plugin.Abstractions\UTF.Plugin.Abstractions.csproj" />
+    <!-- Ensure plugin assemblies build before pack-plugins runs -->
+    <ProjectReference Include="..\UTF.Plugins.Drivers\UTF.Plugins.Drivers.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\UTF.Plugins.Example\UTF.Plugins.Example.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -22,5 +25,14 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <PropertyGroup>
+    <PluginPackScript>$(MSBuildProjectDirectory)\..\scripts\pack-plugins.ps1</PluginPackScript>
+    <PluginOutDirNoSlash>$(MSBuildProjectDirectory)\bin\$(Configuration)\$(TargetFramework)</PluginOutDirNoSlash>
+  </PropertyGroup>
+
+  <Target Name="PackPlugins" AfterTargets="Build" Condition="Exists('$(PluginPackScript)')">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(PluginPackScript)&quot; -SolutionDir &quot;$(MSBuildProjectDirectory)\..&quot; -OutDir &quot;$(PluginOutDirNoSlash)&quot; -Configuration &quot;$(Configuration)&quot;" />
+  </Target>
 
 </Project>

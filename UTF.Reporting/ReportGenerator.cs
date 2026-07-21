@@ -11,6 +11,9 @@ using System.Xml;
 using UTF.Core.Persistence;
 using System.Threading;
 using System.Threading.Tasks;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 using UTF.Logging;
 
 namespace UTF.Reporting;
@@ -35,10 +38,17 @@ public sealed class ReportGenerator : IReportGenerator, IDisposable
     public IReadOnlyList<ReportFormat> SupportedFormats => new[]
     {
         ReportFormat.HTML,
+        ReportFormat.PDF,
         ReportFormat.CSV,
         ReportFormat.JSON,
         ReportFormat.XML
     }.ToList().AsReadOnly();
+
+    static ReportGenerator()
+    {
+        // Community license for open-source / internal factory tooling.
+        QuestPDF.Settings.License = LicenseType.Community;
+    }
 
     private void InitializeDefaultTemplates()
     {
@@ -355,25 +365,32 @@ public sealed class ReportGenerator : IReportGenerator, IDisposable
         {
             _logger?.Info($"使用模板生成报告: {template.Name} -> {format}");
             
-            // 根据格式生成报告
-            var content = format switch
-            {
-                ReportFormat.HTML => await GenerateHtmlReportAsync(template, dataSet, cancellationToken),
-                ReportFormat.PDF => await GeneratePdfReportAsync(template, dataSet, cancellationToken),
-                ReportFormat.Excel => await GenerateExcelReportAsync(template, dataSet, cancellationToken),
-                ReportFormat.CSV => await GenerateCsvReportAsync(template, dataSet, cancellationToken),
-                ReportFormat.JSON => await GenerateJsonReportAsync(template, dataSet, cancellationToken),
-                ReportFormat.XML => await GenerateXmlReportAsync(template, dataSet, cancellationToken),
-                _ => throw new NotSupportedException($"不支持的报告格式: {format}")
-            };
-            
             var fullOutputPath = Path.GetFullPath(outputPath);
             var outputDirectory = Path.GetDirectoryName(fullOutputPath)!;
             Directory.CreateDirectory(outputDirectory);
             var temporaryPath = Path.Combine(outputDirectory, $".{Path.GetFileName(fullOutputPath)}.{Guid.NewGuid():N}.tmp");
             try
             {
-                await File.WriteAllTextAsync(temporaryPath, content, Encoding.UTF8, cancellationToken);
+                if (format == ReportFormat.PDF)
+                {
+                    await GeneratePdfReportToFileAsync(template, dataSet, temporaryPath, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    var content = format switch
+                    {
+                        ReportFormat.HTML => await GenerateHtmlReportAsync(template, dataSet, cancellationToken),
+                        ReportFormat.Excel => await GenerateExcelReportAsync(template, dataSet, cancellationToken),
+                        ReportFormat.CSV => await GenerateCsvReportAsync(template, dataSet, cancellationToken),
+                        ReportFormat.JSON => await GenerateJsonReportAsync(template, dataSet, cancellationToken),
+                        ReportFormat.XML => await GenerateXmlReportAsync(template, dataSet, cancellationToken),
+                        _ => throw new NotSupportedException($"不支持的报告格式: {format}")
+                    };
+                    await File.WriteAllTextAsync(temporaryPath, content, Encoding.UTF8, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
                 File.Move(temporaryPath, fullOutputPath, overwrite: true);
             }
             finally
@@ -487,11 +504,118 @@ public sealed class ReportGenerator : IReportGenerator, IDisposable
         return html.Substring(0, startIdx) + rowsHtml + html.Substring(endIdx + endMarker.Length);
     }
 
-    private Task<string> GeneratePdfReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
+    /// <summary>
+    /// 使用 QuestPDF 将数据集渲染为 PDF 文件（二进制写入，非文本）。
+    /// </summary>
+    private Task GeneratePdfReportToFileAsync(
+        ReportTemplate template,
+        ReportDataSet dataSet,
+        string outputPath,
+        CancellationToken cancellationToken)
     {
-        // PDF 生成未实现：当前未集成 PDF 生成库（QuestPDF 等）。
-        // 如需 PDF，请先生成 HTML 再用外部工具转换，或在本类型中接入 PDF 库。
-        throw new NotSupportedException("PDF generation not yet implemented; use HTML/CSV");
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var totalTests = dataSet.DataItems.FirstOrDefault(i => i.Name == "TotalTests")?.Value?.ToString() ?? "0";
+        var passedTests = dataSet.DataItems.FirstOrDefault(i => i.Name == "PassedTests")?.Value?.ToString() ?? "0";
+        var failedTests = dataSet.DataItems.FirstOrDefault(i => i.Name == "FailedTests")?.Value?.ToString() ?? "0";
+        var passRate = dataSet.DataItems.FirstOrDefault(i => i.Name == "PassRate")?.Value?.ToString() ?? "0";
+        var sessionId = dataSet.Metadata.TryGetValue("SessionId", out var sid) ? sid?.ToString() ?? "" : "";
+        var title = string.IsNullOrWhiteSpace(template.Name) ? "UTF Test Report" : template.Name;
+
+        Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(40);
+                page.DefaultTextStyle(x => x.FontSize(10));
+
+                page.Header().Column(col =>
+                {
+                    col.Item().Text(title).FontSize(18).SemiBold();
+                    col.Item().Text($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}").FontSize(9).FontColor(Colors.Grey.Darken1);
+                    if (!string.IsNullOrEmpty(sessionId))
+                    {
+                        col.Item().Text($"Session: {sessionId}").FontSize(9);
+                    }
+                });
+
+                page.Content().PaddingVertical(12).Column(col =>
+                {
+                    col.Spacing(8);
+                    col.Item().Text("Summary").FontSize(14).SemiBold();
+                    col.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(c =>
+                        {
+                            c.RelativeColumn();
+                            c.RelativeColumn();
+                        });
+                        void Row(string k, string v)
+                        {
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(4).Text(k);
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(4).Text(v);
+                        }
+
+                        Row("Total tests", totalTests);
+                        Row("Passed", passedTests);
+                        Row("Failed", failedTests);
+                        Row("Pass rate", passRate);
+                    });
+
+                    col.Item().PaddingTop(12).Text("Results").FontSize(14).SemiBold();
+                    if (dataSet.Rows.Count == 0)
+                    {
+                        col.Item().Text("No result rows.").Italic().FontColor(Colors.Grey.Medium);
+                    }
+                    else
+                    {
+                        col.Item().Table(table =>
+                        {
+                            var columns = dataSet.Columns.Count > 0
+                                ? dataSet.Columns
+                                : new List<string> { "DUTId", "StepName", "TestResult", "MeasuredValue", "ExpectedValue" };
+
+                            table.ColumnsDefinition(c =>
+                            {
+                                foreach (var _ in columns)
+                                {
+                                    c.RelativeColumn();
+                                }
+                            });
+
+                            table.Header(h =>
+                            {
+                                foreach (var name in columns)
+                                {
+                                    h.Cell().Background(Colors.Grey.Lighten3).Padding(4).Text(name).SemiBold().FontSize(8);
+                                }
+                            });
+
+                            foreach (var row in dataSet.Rows)
+                            {
+                                foreach (var name in columns)
+                                {
+                                    row.TryGetValue(name, out var value);
+                                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2)
+                                        .Padding(3).Text(value?.ToString() ?? "").FontSize(8);
+                                }
+                            }
+                        });
+                    }
+                });
+
+                page.Footer().AlignCenter().Text(t =>
+                {
+                    t.Span("Page ");
+                    t.CurrentPageNumber();
+                    t.Span(" / ");
+                    t.TotalPages();
+                });
+            });
+        }).GeneratePdf(outputPath);
+
+        return Task.CompletedTask;
     }
 
     private Task<string> GenerateExcelReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)

@@ -196,6 +196,7 @@ public sealed class StabilityTests : IDisposable
         var path = Path.Combine(dir, "unified-config.json");
         await File.WriteAllTextAsync(path, """
             {
+              "ConfigurationInfo": { "Name": "stability-fixture" },
               "SystemSettings": { "ResultsPath": "./out" },
               "DUTConfiguration": {
                 "ProductInfo": { "Name": "Widget", "Model": "W1" },
@@ -211,9 +212,11 @@ public sealed class StabilityTests : IDisposable
                       "Id": "s1",
                       "Name": "mock",
                       "Order": 1,
+                      "Enabled": true,
                       "Type": "custom",
                       "Channel": "cmd",
                       "Command": "echo",
+                      "Timeout": 5000,
                       "Expected": "contains:OK",
                       "Parameters": { "MockOutput": "OK" }
                     }

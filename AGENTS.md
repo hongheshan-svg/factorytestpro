@@ -11,8 +11,10 @@
 ## Architecture
 - Keep business and execution logic out of the UI layer. Prefer placing reusable logic in `UTF.Core` or `UTF.Business`; `UTF.UI` should orchestrate windows, binding, and service wiring.
 - Configuration-driven execution is the default flow (single engine: `ConfigDrivenTestEngine` / `IStepExecutionService`; no dual-engine / `ITestEngine`):
-  - **UI**: `config/unified-config.json` -> `UTF.UI.Services.ConfigurationManager` -> `DUTMonitorManager` (UI projection) -> `ConfigDrivenTestOrchestrator` -> `ConfigDrivenTestEngine`
-  - **Headless**: `config/unified-config.json` -> `UTF.Core.Configuration.FileUnifiedConfigurationService` -> `ConfigDrivenTestOrchestrator.CreateSessionAsync(ConfigTestProject, ...)` -> `ConfigDrivenTestEngine`
+  - **Models + IO**: `UTF.Configuration` (`UnifiedConfiguration`, `UnifiedConfigurationManager`, `IUnifiedConfigurationAdapter`)
+  - **UI**: `config/unified-config.json` -> `UTF.UI.Services.ConfigurationManager` (thin wrapper) -> `DUTMonitorManager` -> `ConfigDrivenTestOrchestrator` -> `ConfigDrivenTestEngine`
+  - **Headless**: same models via `UTF.Core.Configuration.FileUnifiedConfigurationService` -> Orchestrator
+- CLI build runs `scripts/pack-plugins.ps1` into `UTF.CLI/bin/.../plugins` (no need to point at UI output unless overriding `--plugins`).
 - Result validation MUST use `UTF.Plugin.Abstractions.ExpectedResultMatcher` (re-exported as `UTF.Core.Validation.ExpectedResultMatcher`). Engines and plugins must not re-parse `contains:`/`equals:`/`regex:`/`notcontains:` inline.
 - Plugin-based step execution goes through `UTF.Plugin.Host.StepExecutorPluginHost` and `IPluginService`. Plugin manifests are discovered from `plugins/<pluginId>/<version>/plugin.manifest.json` after build packaging.
 - HAL device communication is plugin-oriented (`UTF.Plugins.Drivers`). Legacy `DUTCommunicationHelper` was removed (Phase C); remaining `IDevice`/`IDUT` types are obsolete but still used by `DeviceManager`.
@@ -41,7 +43,7 @@
   - With packed plugins (after UI build):  
     `dotnet run --project UTF.CLI -- --config config --duts DUT-1,DUT-2 --plugins UTF.UI/bin/Debug/net10.0-windows/plugins`
   - Exit codes: `0` all pass, `1` fail, `2` config/init error.
-  - Phase C limits: no full PDF reports; vision still simulated; real I/O needs plugins or `Parameters.MockOutput`.
+  - PDF reports via QuestPDF (`ReportFormat.PDF`). File vision: place images under `vision-images/` (or `vision-images/<systemId>/`).
 - Tests:
   - `dotnet test UniversalTestFramework.sln`
   - `dotnet test tests/UTF.Core.Tests/UTF.Core.Tests.csproj --logger "console;verbosity=detailed"`

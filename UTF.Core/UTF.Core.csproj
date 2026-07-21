@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\UTF.Configuration\UTF.Configuration.csproj" />
     <ProjectReference Include="..\UTF.HAL\UTF.HAL.csproj" />
     <ProjectReference Include="..\UTF.Logging\UTF.Logging.csproj" />
     <ProjectReference Include="..\UTF.Plugin.Abstractions\UTF.Plugin.Abstractions.csproj" />

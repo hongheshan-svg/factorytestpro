@@ -26,8 +26,10 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddUtfUI(this IServiceCollection services)
     {
-        // 配置适配器
-        services.AddSingleton<UTF.UI.Services.IConfigurationAdapter, UTF.UI.Services.ConfigurationAdapter>();
+        // 配置：模型/IO 在 UTF.Configuration；UI 注册兼容包装
+        services.AddSingleton<UTF.Configuration.IUnifiedConfigurationAdapter, UTF.UI.Services.ConfigurationAdapter>();
+        services.AddSingleton<UTF.UI.Services.IConfigurationAdapter>(sp =>
+            (UTF.UI.Services.IConfigurationAdapter)sp.GetRequiredService<UTF.Configuration.IUnifiedConfigurationAdapter>());
 
         // 插件主机
         services.AddSingleton<UTF.Plugin.Host.StepExecutorPluginHost>(sp =>
@@ -43,11 +45,9 @@ public static class ServiceCollectionExtensions
             return new UTF.Plugin.Host.PluginServiceAdapter(pluginHost);
         });
 
-        // UI 管理器和服务
-        // Residual debt (Phase B): ConfigurationManager (file IO + UnifiedConfiguration models)
-        // still lives in UTF.UI. Mapping to engine models is in UTF.Core.Mapping.TestProjectMapper.
-        // Full downshift of UnifiedConfiguration to UTF.Configuration is deferred to avoid XAML/namespace churn.
-        services.AddSingleton<UTF.UI.Services.ConfigurationManager>();
+        services.AddSingleton<UTF.UI.Services.ConfigurationManager>(sp =>
+            new UTF.UI.Services.ConfigurationManager(
+                sp.GetRequiredService<UTF.Configuration.IUnifiedConfigurationAdapter>()));
         services.AddSingleton<IConfigurationService>(sp => sp.GetRequiredService<UTF.UI.Services.ConfigurationManager>());
 
         // DUTMonitorManager projects onto ConfigDrivenTestOrchestrator (single session entry).

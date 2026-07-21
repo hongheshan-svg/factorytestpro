@@ -14,6 +14,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IConfigurationValidator<DUTConfig>, DUTConfigValidator>();
         services.AddSingleton<IConfigurationValidator<TestConfig>, TestConfigValidator>();
         services.AddSingleton<CompositeConfigurationValidator>();
+        services.AddSingleton<IUnifiedConfigurationAdapter, UnifiedConfigurationAdapter>();
+        services.AddSingleton<UnifiedConfigurationManager>(sp =>
+            new UnifiedConfigurationManager(sp.GetRequiredService<IUnifiedConfigurationAdapter>()));
         return services;
     }
 }

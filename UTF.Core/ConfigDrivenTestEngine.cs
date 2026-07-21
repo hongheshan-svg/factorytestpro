@@ -338,14 +338,40 @@ public sealed class ConfigDrivenTestEngine : IStepExecutionService, IDisposable
             }
 
             if (TryGetStringRule(validationRules, "Regex", out var regexPattern) &&
-                !string.IsNullOrWhiteSpace(regexPattern) &&
-                !Regex.IsMatch(actualOutput, regexPattern, RegexOptions.IgnoreCase))
+                !string.IsNullOrWhiteSpace(regexPattern))
             {
-                return new StepValidationResult
+                // 与 ExpectedResultMatcher 一致：2s 超时，防止 ReDoS
+                try
                 {
-                    IsValid = false,
-                    ErrorMessage = $"输出不匹配正则表达式: {regexPattern}"
-                };
+                    if (!Regex.IsMatch(
+                            actualOutput,
+                            regexPattern,
+                            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                            TimeSpan.FromSeconds(2)))
+                    {
+                        return new StepValidationResult
+                        {
+                            IsValid = false,
+                            ErrorMessage = $"输出不匹配正则表达式: {regexPattern}"
+                        };
+                    }
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    return new StepValidationResult
+                    {
+                        IsValid = false,
+                        ErrorMessage = $"正则表达式匹配超时: {regexPattern}"
+                    };
+                }
+                catch (ArgumentException ex)
+                {
+                    return new StepValidationResult
+                    {
+                        IsValid = false,
+                        ErrorMessage = $"正则表达式无效: {ex.Message}"
+                    };
+                }
             }
 
             if (TryGetNumericRange(validationRules, out var minValue, out var maxValue))

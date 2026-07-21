@@ -68,14 +68,14 @@ internal static class Program
                 return ExitError;
             }
 
-            var testProject = configService.ToConfigTestProject();
+            var testProject = await configService.ToConfigTestProjectAsync().ConfigureAwait(false);
             if (testProject == null)
             {
                 Console.Error.WriteLine("Config error: TestProjectConfiguration.TestProject is missing or has no Id.");
                 return ExitError;
             }
 
-            var dutConfig = configService.ToDutConfigInfo();
+            var dutConfig = await configService.ToDutConfigInfoAsync().ConfigureAwait(false);
             var dutIds = options.ResolveDutIds();
             if (dutIds.Count == 0)
             {
@@ -83,7 +83,8 @@ internal static class Program
                 return ExitError;
             }
 
-            var resultsPath = configService.Document.SystemSettings?.ResultsPath;
+            var unified = await configService.Manager.GetUnifiedConfigurationAsync().ConfigureAwait(false);
+            var resultsPath = unified.SystemSettings?.ResultsPath;
             if (string.IsNullOrWhiteSpace(resultsPath))
             {
                 resultsPath = "test-results";

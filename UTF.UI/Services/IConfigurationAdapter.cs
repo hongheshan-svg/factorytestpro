@@ -1,17 +1,10 @@
-using System.Collections.Generic;
+using UTF.Configuration;
 
 namespace UTF.UI.Services;
 
-public interface IConfigurationAdapter
+/// <summary>
+/// UI 兼容别名：实现位于 <see cref="IUnifiedConfigurationAdapter"/>。
+/// </summary>
+public interface IConfigurationAdapter : IUnifiedConfigurationAdapter
 {
-    string GetProductModel(UnifiedConfiguration config);
-    List<TestStepConfig> GetTestSteps(UnifiedConfiguration config);
-    int GetMaxConcurrent(UnifiedConfiguration config);
-    List<string> GetSerialPorts(UnifiedConfiguration config);
-    List<string> GetNetworkHosts(UnifiedConfiguration config);
-    string GetNamingTemplate(UnifiedConfiguration config);
-    string GetIdTemplate(UnifiedConfiguration config);
-    bool ValidateConfiguration(UnifiedConfiguration config);
-    List<string> ValidateConfigurationWithErrors(UnifiedConfiguration config);
-    string GetConfigurationSummary(UnifiedConfiguration config);
 }

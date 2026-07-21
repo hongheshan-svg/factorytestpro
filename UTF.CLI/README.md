@@ -58,7 +58,8 @@ Unsigned plugins require `UTFF_ALLOW_UNSIGNED_PLUGINS=1` (dev/test only).
 
 ## Phase C limitations
 
-- No full PDF stack (Reporting PDF remains unsupported / NotSupportedException).
+- Plugins are packed automatically on `dotnet build` of UTF.CLI (same script as UI).
+- PDF reports are available via UTF.Reporting + QuestPDF when using the library (CLI prints session JSON summary).
 - Vision remains simulated.
 - Real serial/instrument I/O requires matching driver plugins under `--plugins`.
 - UI MVVM migration is out of scope for this slice.

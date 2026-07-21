@@ -127,12 +127,13 @@ public sealed class CriticalRegressionTests
     }
 
     [Fact][Trait("Category","Unit")]
-    public void ReportGenerator_SupportedFormats_ExcludeFakeBinaryFormats()
+    public void ReportGenerator_SupportedFormats_ExcludeUnimplementedAndIncludePdf()
     {
         using var generator = new ReportGenerator();
 
         Assert.DoesNotContain(ReportFormat.Excel, generator.SupportedFormats);
-        Assert.DoesNotContain(ReportFormat.PDF, generator.SupportedFormats);
+        Assert.Contains(ReportFormat.PDF, generator.SupportedFormats);
+        Assert.Contains(ReportFormat.HTML, generator.SupportedFormats);
     }
 
     [Fact][Trait("Category","Unit")]

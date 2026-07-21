@@ -97,23 +97,42 @@ namespace UTF.Vision
         {
             try
             {
-                // 创建默认的模拟视觉系统
+                // 优先文件视觉（真实图像输入）；无图像目录时回退模拟系统。
+                var imageRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "vision-images");
+                if (_configuration.TryGetValue("ImageDirectory", out var configuredDir) &&
+                    configuredDir is string dir && !string.IsNullOrWhiteSpace(dir))
+                {
+                    imageRoot = dir;
+                }
+
                 var defaultSystems = new[]
                 {
-                    new { Id = "vision_001", Name = "主检测相机", Type = "Simulated" },
-                    new { Id = "vision_002", Name = "辅助检测相机", Type = "Simulated" },
-                    new { Id = "vision_003", Name = "质量检测相机", Type = "Simulated" }
+                    new { Id = "vision_001", Name = "主检测相机", PreferFile = true },
+                    new { Id = "vision_002", Name = "辅助检测相机", PreferFile = true },
+                    new { Id = "vision_003", Name = "质量检测相机", PreferFile = false }
                 };
-                
+
                 foreach (var systemInfo in defaultSystems)
                 {
+                    IVisionSystem visionSystem;
+                    var systemImageDir = Path.Combine(imageRoot, systemInfo.Id);
+                    if (systemInfo.PreferFile)
+                    {
+                        visionSystem = new FileVisionSystem(
+                            systemInfo.Id,
+                            systemInfo.Name,
+                            Directory.Exists(systemImageDir) ? systemImageDir : imageRoot,
+                            _logger);
+                        _logger.Info($"使用 FileVisionSystem: {systemInfo.Name}");
+                    }
+                    else
+                    {
 #pragma warning disable CS0618
-                    // SimulatedVisionSystem is intentionally used here as the default dev-only
-                    // vision system; production deployments should register a real IVisionSystem.
-                    var visionSystem = new SimulatedVisionSystem(systemInfo.Id, systemInfo.Name, _logger);
+                        visionSystem = new SimulatedVisionSystem(systemInfo.Id, systemInfo.Name, _logger);
 #pragma warning restore CS0618
+                        _logger.Info($"使用 SimulatedVisionSystem（开发回退）: {systemInfo.Name}");
+                    }
 
-                    // 初始化视觉系统
                     var initialized = await visionSystem.InitializeAsync();
                     if (initialized)
                     {
