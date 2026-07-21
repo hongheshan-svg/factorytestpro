@@ -50,14 +50,34 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<UTF.UI.Services.DUTMonitorManager>();
         services.AddSingleton<IDUTMonitorService>(sp => sp.GetRequiredService<UTF.UI.Services.DUTMonitorManager>());
 
-        // 权限管理器（来自 UTF.UI.Services）
-        services.AddTransient<UTF.UI.Services.IPermissionManager, UTF.UI.Services.PermissionManager>();
+        // 权限管理器（单例 - 持有用户状态）
+        services.AddSingleton<UTF.UI.Services.IPermissionManager, UTF.UI.Services.PermissionManager>();
 
         // 报告生成器
         services.AddSingleton<ReportGenerator>();
 
         // 配置驱动报告桥接
         services.AddTransient<ConfigDrivenReportBridge>();
+
+        // 步骤执行服务（ConfigDrivenTestEngine 直接实现 IStepExecutionService）
+        services.AddSingleton<UTF.Core.IStepExecutionService>(sp => sp.GetRequiredService<UTF.Core.ConfigDrivenTestEngine>());
+
+        // 对话框与窗口工厂抽象
+        services.AddSingleton<IDialogService, DialogService>();
+        services.AddSingleton<IWindowFactory>(sp => new WindowFactory(
+            sp.GetRequiredService<IServiceProvider>(),
+            sp.GetRequiredService<IDialogService>(),
+            sp.GetRequiredService<IPermissionManager>(),
+            sp.GetRequiredService<DUTMonitorManager>(),
+            () => System.Windows.Application.Current?.MainWindow as System.Windows.Window));
+
+        // 测试配置构建器（快速创建向导使用）
+        services.AddSingleton<ITestConfigurationBuilder, TestConfigurationBuilder>();
+
+        // 视图模型（瞬态 - 每次打开窗口获得新实例）
+        services.AddTransient<UTF.UI.ViewModels.MainWindowViewModel>();
+        services.AddTransient<UTF.UI.ViewModels.ConfigurationCenterViewModel>();
+        services.AddTransient<UTF.UI.ViewModels.QuickTestWizardViewModel>();
 
         return services;
     }
