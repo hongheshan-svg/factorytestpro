@@ -1,0 +1,62 @@
+<UserControl x:Class="UTF.UI.Views.ScanToTestView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Background="White" CornerRadius="8" Margin="5">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+        </Border.Effect>
+        <Grid Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="📷 扫码测试" FontSize="16" FontWeight="Bold" Foreground="#1565C0" Margin="0,0,0,16"/>
+
+            <StackPanel Grid.Row="1" Margin="0,0,0,20">
+                <TextBlock Text="条码 / 序列号" FontSize="12" Foreground="#546E7A" Margin="0,0,0,6"/>
+                <TextBox x:Name="BarcodeTextBox"
+                         Text="{Binding ScanBarcodeText, UpdateSourceTrigger=PropertyChanged}"
+                         FontSize="22" FontWeight="SemiBold" Padding="12,10"
+                         MinHeight="48"
+                         VerticalContentAlignment="Center">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Return" Command="{Binding SubmitScanCommand}"/>
+                    </TextBox.InputBindings>
+                </TextBox>
+                <TextBlock Text="扫描后按 Enter 绑定 DUT 并启动测试（匹配序列号或 DUT-1）"
+                           FontSize="11" Foreground="#90A4AE" Margin="0,6,0,0"/>
+            </StackPanel>
+
+            <!-- Big PASS/FAIL indicator -->
+            <Border Grid.Row="2" CornerRadius="16" Padding="24"
+                    Background="{Binding LastScanResultBrush}"
+                    VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                    MinHeight="180" Margin="0,0,0,16">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="{Binding LastScanResultText}"
+                               FontSize="64" FontWeight="Bold" Foreground="White"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="{Binding LastScanDutId}"
+                               FontSize="16" Foreground="#F5F5F5"
+                               HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                    <TextBlock Text="{Binding LastScanDetail}"
+                               FontSize="13" Foreground="#EEEEEE"
+                               HorizontalAlignment="Center" Margin="0,4,0,0"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button Content="提交扫码" Padding="20,10" FontSize="13" FontWeight="SemiBold"
+                        Command="{Binding SubmitScanCommand}"
+                        Background="#1565C0" Margin="0,0,8,0"/>
+                <Button Content="清除结果" Padding="16,10" FontSize="13"
+                        Command="{Binding ClearScanResultCommand}"
+                        Background="#78909C"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

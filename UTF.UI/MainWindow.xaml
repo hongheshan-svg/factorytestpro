@@ -4,6 +4,7 @@
         xmlns:local="clr-namespace:UTF.UI"
         xmlns:converters="clr-namespace:UTF.UI.Converters"
         xmlns:loc="clr-namespace:UTF.UI.Localization"
+        xmlns:views="clr-namespace:UTF.UI.Views"
         Title="通用自动化测试平台" 
         Height="900" Width="1400" WindowStartupLocation="CenterScreen">
     
@@ -18,6 +19,7 @@
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         
         <!-- 测试结果样式 -->
         <Style x:Key="PassResultStyle" TargetType="TextBlock">
@@ -106,6 +108,15 @@
                           IsEnabled="{Binding CanConfigureSystem}"
                           Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             </MenuItem>
+            <MenuItem Header="视图(_V)">
+                <MenuItem Header="工作台模式" IsEnabled="False" FontWeight="SemiBold"/>
+                <MenuItem Header="多DUT看板" Command="{Binding SetWorkbenchModeCommand}" CommandParameter="MultiDutBoard"/>
+                <MenuItem Header="单工位" Command="{Binding SetWorkbenchModeCommand}" CommandParameter="SingleStation"/>
+                <MenuItem Header="扫码测试" Command="{Binding SetWorkbenchModeCommand}" CommandParameter="ScanToTest"/>
+                <MenuItem Header="仪器台" Command="{Binding SetWorkbenchModeCommand}" CommandParameter="InstrumentBench"/>
+                <Separator/>
+                <MenuItem Header="恢复配置模式" Command="{Binding ResetWorkbenchModeFromConfigCommand}"/>
+            </MenuItem>
             <MenuItem Header="账户(_A)">
                 <MenuItem Header="退出登录" Command="{Binding LogoutCommand}"/>
             </MenuItem>
@@ -186,6 +197,15 @@
                         <TextBlock x:Name="StepCountText" Text="0步" FontSize="11" FontWeight="Bold" Foreground="#1565C0"/>
                     </StackPanel>
                 </Border>
+                <Rectangle Width="1" Fill="#E0E0E0" Margin="16,8"/>
+                <!-- 工作台模式切换（会话级，不写配置） -->
+                <TextBlock Text="工作台模式:" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,6,0"/>
+                <ComboBox Width="140" VerticalAlignment="Center"
+                          ItemsSource="{Binding AvailableWorkbenchModes}"
+                          SelectedItem="{Binding SelectedWorkbenchModeOption, Mode=TwoWay}"
+                          DisplayMemberPath="DisplayName"/>
+                <TextBlock Text="{Binding WorkbenchModeDisplay}" VerticalAlignment="Center"
+                           Foreground="#1565C0" FontSize="11" FontWeight="SemiBold" Margin="8,0,0,0"/>
             </StackPanel>
         </Border>
 
@@ -208,141 +228,16 @@
             </Grid>
         </Border>
         
-        <!-- 主界面内容 - 简化版 -->
-        <Grid Grid.Row="4" Margin="10">
-            
-            <!-- DUT列表监控区域 -->
-            <Border Background="White" CornerRadius="8" Margin="5">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
-                </Border.Effect>
-                
-    <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    
-                    <!-- 控制面板 -->
-                    <Border Grid.Row="0" Background="#495057" Padding="10,8">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding MonitorTitleText}" FontSize="12" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,15,0"/>
-                            
-                            <TextBlock Text="使用上方工具栏进行测试控制" FontSize="10" Foreground="#ADB5BD" VerticalAlignment="Center" Margin="0,0,15,0"/>
-                            
-                            <Button Content="🔄 刷新" Margin="3,0" Padding="8,4" FontSize="10"
-                                    Command="{Binding RefreshDUTsCommand}"/>
-                            <Button x:Name="ExportReportButton" Content="📤 导出报告" Margin="3,0" Padding="8,4" FontSize="10" Command="{Binding ExportReportCommand}"
-                                    IsEnabled="{Binding CanExportReport}"/>
-                            <Button x:Name="ClearLogsButton" Content="🗑️ 清除日志" Margin="3,0" Padding="8,4" FontSize="10" Command="{Binding ClearAllLogsCommand}"
-                                    IsEnabled="{Binding CanClearLogs}"/>
-                        </StackPanel>
-                    </Border>
-                    
-                    <!-- DUT列表（内置滚动优化） -->
-                    <DataGrid Grid.Row="1" x:Name="MainDUTListDataGrid"
-                              ItemsSource="{Binding DUTItems}"
-                              AutoGenerateColumns="False"
-                              CanUserAddRows="False"
-                              CanUserDeleteRows="False"
-                              GridLinesVisibility="Horizontal"
-                              HeadersVisibility="Column"
-                              AlternatingRowBackground="#F8F9FA"
-                              SelectionMode="Single"
-                              FontSize="10"
-                              RowHeight="35"
-                              EnableRowVirtualization="True"
-                              EnableColumnVirtualization="True"
-                              VirtualizingPanel.IsVirtualizing="True"
-                              VirtualizingPanel.VirtualizationMode="Recycling"
-                              VirtualizingPanel.CacheLength="10,10"
-                              VirtualizingPanel.CacheLengthUnit="Item"
-                              HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Auto">
-                        
-                        <DataGrid.Columns>
-                            <!-- DUT信息列 -->
-                            <DataGridTemplateColumn Header="DUT信息" Width="140">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Margin="3">
-                                            <TextBlock Text="{Binding DutId}" FontWeight="Bold" FontSize="10"/>
-                                            <TextBlock Text="{Binding DutName}" FontSize="8" Foreground="#6C757D"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                            
-                            <!-- 整体结果列 -->
-                            <DataGridTemplateColumn Header="综合结果" Width="140" MinWidth="120">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Border Background="{Binding OverallStatusBrush}" CornerRadius="5" Padding="6,3" Margin="2">
-                                            <TextBlock Text="{Binding OverallResultText}" 
-                                                     Foreground="White" 
-                                                     FontWeight="Bold" 
-                                                     FontSize="11"
-                                                     TextAlignment="Center"/>
-                                        </Border>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                            
-                            <!-- 当前步骤列 -->
-                            <DataGridTemplateColumn Header="当前步骤" Width="140" MinWidth="120">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding CurrentStepText}" FontWeight="Bold" FontSize="9" Margin="3" VerticalAlignment="Center"/>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                            
-                            <!-- 动态测试步骤列将在代码中生成 -->
-                            
-                            <!-- 最新日志列 - 使用剩余空间并保持在最右边 -->
-                            <DataGridTemplateColumn Header="最新日志 (右键操作)" Width="*" MinWidth="300">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Border Padding="3" Background="#F8F9FA" CornerRadius="3">
-                                            <Border.ContextMenu>
-                                                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                                    <MenuItem Header="📝 查看完整日志"
-                                                              Command="{Binding DataContext.ViewDutLogCommand, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}"
-                                                              CommandParameter="{Binding}"/>
-                                                    <MenuItem Header="📊 详细信息"
-                                                              Command="{Binding DataContext.ViewDutDetailCommand, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}"
-                                                              CommandParameter="{Binding}"/>
-                                                    <Separator/>
-                                                    <MenuItem Header="🔧 重新测试"
-                                                              Command="{Binding DataContext.RetestDutCommand, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}"
-                                                              CommandParameter="{Binding}"/>
-                                                </ContextMenu>
-                                            </Border.ContextMenu>
-                                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" MaxHeight="30">
-                                                <ItemsControl ItemsSource="{Binding RecentLogs}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <TextBlock Text="{Binding DisplayText}" 
-                                                                     FontFamily="Consolas" 
-                                                                     FontSize="8" 
-                                                                     Foreground="{Binding Level, Converter={StaticResource LogLevelToColorConverter}}"
-                                                                     TextWrapping="Wrap"
-                                                                     TextTrimming="CharacterEllipsis"
-                                                                     Margin="0,0,0,1"/>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </ScrollViewer>
-                                        </Border>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                    
-                </Grid>
-            </Border>
-            
+        <!-- WorkbenchHost: multi-mode main content (P5); row 4 after validation banner -->
+        <Grid x:Name="WorkbenchHost" Grid.Row="4" Margin="10">
+            <views:MultiDutBoardView x:Name="MultiDutBoardPanel"
+                                     Visibility="{Binding IsMultiDutBoardMode, Converter={StaticResource BoolToVis}}"/>
+            <views:SingleStationView x:Name="SingleStationPanel"
+                                     Visibility="{Binding IsSingleStationMode, Converter={StaticResource BoolToVis}}"/>
+            <views:ScanToTestView x:Name="ScanToTestPanel"
+                                  Visibility="{Binding IsScanToTestMode, Converter={StaticResource BoolToVis}}"/>
+            <views:InstrumentBenchView x:Name="InstrumentBenchPanel"
+                                       Visibility="{Binding IsInstrumentBenchMode, Converter={StaticResource BoolToVis}}"/>
         </Grid>
         
         <!-- 状态栏 -->

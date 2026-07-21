@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,6 +41,12 @@ public partial class MainWindowViewModel : ObservableObject
     /// <summary>Active UI profile (defaults to full engineer chrome when config omits it).</summary>
     private UiProfile _uiProfile = UiProfile.CreateDefault();
 
+    /// <summary>
+    /// When true, the next config-driven mode apply is skipped (session override active).
+    /// Reset when user picks "从配置" or configuration is re-applied with <c>forceFromConfig</c>.
+    /// </summary>
+    private bool _workbenchModeSessionOverride;
+
     public MainWindowViewModel(
         DUTMonitorManager dutMonitorManager,
         ConfigurationManager configManager,
@@ -61,6 +68,9 @@ public partial class MainWindowViewModel : ObservableObject
         _reportGenerator = _serviceProvider.GetService<ReportGenerator>();
 
         DUTItems = _dutMonitorManager.DUTItems;
+        InstrumentEndpoints = new ObservableCollection<InstrumentEndpointItem>();
+        AvailableWorkbenchModes = new ObservableCollection<WorkbenchModeOption>(
+            WorkbenchModes.All.Select(m => new WorkbenchModeOption(m, WorkbenchModes.DisplayName(m))));
 
         // 跟随 DUTMonitorManager 的统计刷新事件，将统计聚合到本 VM 的属性。
         _dutMonitorManager.StatisticsUpdateRequested += OnStatisticsUpdateRequested;
@@ -73,6 +83,8 @@ public partial class MainWindowViewModel : ObservableObject
 
         // 辅助窗口保存配置后，触发刷新流程（由代码后置订阅以处理 DataGrid 等 UI 资源）。
         _windowFactory.ConfigurationApplied += OnConfigurationApplied;
+
+        ApplyWorkbenchMode(WorkbenchModes.MultiDutBoard, isSessionOverride: false);
     }
 
     /// <summary>
@@ -168,6 +180,217 @@ public partial class MainWindowViewModel : ObservableObject
     /// </summary>
     public bool IsStartTestEnabled => CanStartTest && !HasConfigErrors;
 
+    // ────────────────── Workbench modes (P5) ──────────────────
+
+    /// <summary>Configured mode from <c>UiProfile.Mode</c> (last applied config value).</summary>
+    [ObservableProperty]
+    private string _configuredWorkbenchMode = WorkbenchModes.MultiDutBoard;
+
+    /// <summary>Active workbench mode for this session (may override config without saving).</summary>
+    [ObservableProperty]
+    private string _workbenchMode = WorkbenchModes.MultiDutBoard;
+
+    /// <summary>Display label for current mode (status / toolbar).</summary>
+    [ObservableProperty]
+    private string _workbenchModeDisplay = "多DUT看板";
+
+    [ObservableProperty]
+    private bool _isMultiDutBoardMode = true;
+
+    [ObservableProperty]
+    private bool _isSingleStationMode;
+
+    [ObservableProperty]
+    private bool _isScanToTestMode;
+
+    [ObservableProperty]
+    private bool _isInstrumentBenchMode;
+
+    /// <summary>From UiProfile; whether MultiDutBoard should generate step columns.</summary>
+    [ObservableProperty]
+    private bool _showStepColumns = true;
+
+    /// <summary>Selected DUT for SingleStation view.</summary>
+    [ObservableProperty]
+    private DUTMonitorItem? _selectedStationDut;
+
+    /// <summary>Scan-to-test barcode / SN entry.</summary>
+    [ObservableProperty]
+    private string _scanBarcodeText = string.Empty;
+
+    [ObservableProperty]
+    private string _lastScanResultText = "待扫码";
+
+    [ObservableProperty]
+    private string _lastScanDutId = string.Empty;
+
+    [ObservableProperty]
+    private string _lastScanDetail = "扫描条码后按 Enter 启动测试";
+
+    [ObservableProperty]
+    private Brush _lastScanResultBrush = new SolidColorBrush(Color.FromRgb(108, 117, 125));
+
+    /// <summary>Instrument / communication endpoints for InstrumentBench.</summary>
+    public ObservableCollection<InstrumentEndpointItem> InstrumentEndpoints { get; }
+
+    /// <summary>Mode picker options for toolbar ComboBox.</summary>
+    public ObservableCollection<WorkbenchModeOption> AvailableWorkbenchModes { get; }
+
+    [ObservableProperty]
+    private WorkbenchModeOption? _selectedWorkbenchModeOption;
+
+    /// <summary>Last session summary text for InstrumentBench footer.</summary>
+    [ObservableProperty]
+    private string _sessionSummaryText = "尚无测试会话。";
+
+    /// <summary>DUT currently targeted by ScanToTest (for result updates).</summary>
+    private string? _scanTargetDutId;
+
+    partial void OnWorkbenchModeChanged(string value)
+    {
+        WorkbenchModeDisplay = WorkbenchModes.DisplayName(value);
+        IsMultiDutBoardMode = string.Equals(value, WorkbenchModes.MultiDutBoard, StringComparison.OrdinalIgnoreCase);
+        IsSingleStationMode = string.Equals(value, WorkbenchModes.SingleStation, StringComparison.OrdinalIgnoreCase);
+        IsScanToTestMode = string.Equals(value, WorkbenchModes.ScanToTest, StringComparison.OrdinalIgnoreCase);
+        IsInstrumentBenchMode = string.Equals(value, WorkbenchModes.InstrumentBench, StringComparison.OrdinalIgnoreCase);
+
+        var match = AvailableWorkbenchModes.FirstOrDefault(o =>
+            string.Equals(o.Mode, value, StringComparison.OrdinalIgnoreCase));
+        if (!ReferenceEquals(SelectedWorkbenchModeOption, match))
+        {
+            SelectedWorkbenchModeOption = match;
+        }
+
+        if (IsSingleStationMode && SelectedStationDut is null && DUTItems.Count > 0)
+        {
+            SelectedStationDut = DUTItems[0];
+        }
+    }
+
+    partial void OnSelectedWorkbenchModeOptionChanged(WorkbenchModeOption? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        if (!string.Equals(WorkbenchMode, value.Mode, StringComparison.OrdinalIgnoreCase))
+        {
+            // Session override — does not write config.
+            ApplyWorkbenchMode(value.Mode, isSessionOverride: true);
+        }
+    }
+
+    /// <summary>
+    /// Loads <see cref="UiProfile"/> from the current unified config and applies mode
+    /// unless a session override is active (and <paramref name="forceFromConfig"/> is false).
+    /// </summary>
+    public async Task LoadWorkbenchProfileFromConfigAsync(bool forceFromConfig = false)
+    {
+        try
+        {
+            var config = await _configManager.GetUnifiedConfigurationAsync().ConfigureAwait(true);
+            var profile = config.UiProfile;
+            var mode = WorkbenchModes.Normalize(profile?.Mode);
+            ConfiguredWorkbenchMode = mode;
+            ShowStepColumns = profile?.ShowStepColumns ?? true;
+
+            RefreshInstrumentEndpoints(config);
+            EnsureSelectedStationDut();
+
+            if (forceFromConfig || !_workbenchModeSessionOverride)
+            {
+                ApplyWorkbenchMode(mode, isSessionOverride: false);
+            }
+
+            UpdateSessionSummary();
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error("加载工作台 UI 配置失败", ex);
+        }
+    }
+
+    /// <summary>Applies a workbench mode. Session override is not persisted.</summary>
+    public void ApplyWorkbenchMode(string mode, bool isSessionOverride)
+    {
+        var normalized = WorkbenchModes.Normalize(mode);
+        _workbenchModeSessionOverride = isSessionOverride
+            && !string.Equals(normalized, ConfiguredWorkbenchMode, StringComparison.OrdinalIgnoreCase);
+
+        if (isSessionOverride && string.Equals(normalized, ConfiguredWorkbenchMode, StringComparison.OrdinalIgnoreCase))
+        {
+            // User picked the same mode as config — clear override flag.
+            _workbenchModeSessionOverride = false;
+        }
+
+        WorkbenchMode = normalized;
+        _logger?.Info($"工作台模式: {normalized} (sessionOverride={_workbenchModeSessionOverride})");
+    }
+
+    private void EnsureSelectedStationDut()
+    {
+        if (SelectedStationDut is not null
+            && DUTItems.Any(d => string.Equals(d.DutId, SelectedStationDut.DutId, StringComparison.OrdinalIgnoreCase)))
+        {
+            // Keep current selection if still present.
+            SelectedStationDut = DUTItems.First(d =>
+                string.Equals(d.DutId, SelectedStationDut.DutId, StringComparison.OrdinalIgnoreCase));
+            return;
+        }
+
+        SelectedStationDut = DUTItems.FirstOrDefault();
+    }
+
+    private void RefreshInstrumentEndpoints(UnifiedConfiguration config)
+    {
+        InstrumentEndpoints.Clear();
+        var endpoints = config.DUTConfiguration?.CommunicationEndpoints;
+        if (endpoints?.SerialPorts != null)
+        {
+            foreach (var port in endpoints.SerialPorts.Where(p => !string.IsNullOrWhiteSpace(p)))
+            {
+                InstrumentEndpoints.Add(new InstrumentEndpointItem
+                {
+                    Kind = "Serial",
+                    Address = port,
+                    Status = "配置"
+                });
+            }
+        }
+
+        if (endpoints?.NetworkHosts != null)
+        {
+            foreach (var host in endpoints.NetworkHosts.Where(h => !string.IsNullOrWhiteSpace(h)))
+            {
+                InstrumentEndpoints.Add(new InstrumentEndpointItem
+                {
+                    Kind = "Network",
+                    Address = host,
+                    Status = "配置"
+                });
+            }
+        }
+
+        if (InstrumentEndpoints.Count == 0)
+        {
+            InstrumentEndpoints.Add(new InstrumentEndpointItem
+            {
+                Kind = "—",
+                Address = "（配置中无 CommunicationEndpoints）",
+                Status = "空"
+            });
+        }
+    }
+
+    private void UpdateSessionSummary()
+    {
+        SessionSummaryText =
+            $"DUT 总数 {TotalDuts} · 通过 {PassedDuts} · 失败 {FailedDuts} · 通过率 {PassRateText}" +
+            (IsTestRunning ? " · 测试进行中" : " · 空闲") +
+            $" · 工作台: {WorkbenchModeDisplay}";
+    }
+
     // ────────────────── Permission-gating flags ──────────────────
     // 这些标志由 RefreshPermissions() 基于 IPermissionManager.HasPermission 计算，
     // 供 XAML 中 IsEnabled="{Binding CanXxx}" 绑定使用，取代 MainWindow.ApplyPermissions
@@ -177,6 +400,7 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsStartTestEnabled))]
     [NotifyCanExecuteChangedFor(nameof(StartTestCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SubmitScanCommand))]
     private bool _canStartTest;
 
     /// <summary>当前用户是否有停止测试权限。</summary>
@@ -446,6 +670,8 @@ public partial class MainWindowViewModel : ObservableObject
             PassedDuts = passed;
             FailedDuts = failed;
             PassRateText = total > 0 ? $"{(passed * 100.0 / total):F1}%" : "0%";
+            UpdateSessionSummary();
+            RefreshScanResultFromDut();
         }
         catch (Exception ex)
         {
@@ -482,6 +708,7 @@ public partial class MainWindowViewModel : ObservableObject
         StatusText = "所有测试已完成";
         StatusTextFooter = "所有测试已完成";
         UpdateStatistics();
+        RefreshScanResultFromDut();
     }
 
     // ────────────────── Commands ──────────────────
@@ -490,6 +717,144 @@ public partial class MainWindowViewModel : ObservableObject
     /// “开始测试”可执行条件：有权限且配置无错误。
     /// </summary>
     private bool CanExecuteStartTest() => CanStartTest && !HasConfigErrors;
+
+    /// <summary>Session-only workbench mode switch (does not write config).</summary>
+    [RelayCommand]
+    private void SetWorkbenchMode(string? mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode))
+        {
+            return;
+        }
+
+        ApplyWorkbenchMode(mode, isSessionOverride: true);
+    }
+
+    /// <summary>Reset workbench mode to the value from <c>UiProfile.Mode</c>.</summary>
+    [RelayCommand]
+    private async Task ResetWorkbenchModeFromConfigAsync()
+    {
+        _workbenchModeSessionOverride = false;
+        await LoadWorkbenchProfileFromConfigAsync(forceFromConfig: true).ConfigureAwait(true);
+    }
+
+    /// <summary>Scan-to-test: bind SN and start a single DUT run.</summary>
+    [RelayCommand(CanExecute = nameof(CanStartTest))]
+    private async Task SubmitScanAsync()
+    {
+        var barcode = (ScanBarcodeText ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(barcode))
+        {
+            LastScanResultText = "空码";
+            LastScanDetail = "请输入或扫描条码 / 序列号";
+            LastScanResultBrush = new SolidColorBrush(Color.FromRgb(255, 152, 0));
+            return;
+        }
+
+        if (IsTestRunning)
+        {
+            LastScanResultText = "忙";
+            LastScanDetail = "测试进行中，请稍候再扫";
+            LastScanResultBrush = new SolidColorBrush(Color.FromRgb(255, 152, 0));
+            return;
+        }
+
+        try
+        {
+            // Match by SerialNumber, DutId, or fall back to DUT-1 / first item.
+            var target = DUTItems.FirstOrDefault(d =>
+                    string.Equals(d.SerialNumber, barcode, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(d.DutId, barcode, StringComparison.OrdinalIgnoreCase))
+                ?? DUTItems.FirstOrDefault(d => string.Equals(d.DutId, "DUT-1", StringComparison.OrdinalIgnoreCase))
+                ?? DUTItems.FirstOrDefault();
+
+            if (target is null)
+            {
+                LastScanResultText = "无DUT";
+                LastScanDetail = "当前无可用 DUT，请先加载配置";
+                LastScanResultBrush = new SolidColorBrush(Color.FromRgb(220, 53, 69));
+                return;
+            }
+
+            target.SerialNumber = barcode;
+            SelectedStationDut = target;
+            _scanTargetDutId = target.DutId;
+            LastScanDutId = target.DutId;
+            LastScanResultText = "测试中";
+            LastScanDetail = $"条码 {barcode} → {target.DutId}";
+            LastScanResultBrush = new SolidColorBrush(Color.FromRgb(255, 193, 7));
+
+            IsTestRunning = true;
+            StartTestButtonText = "▶️ 测试进行中...";
+            StatusText = $"扫码测试: {target.DutId}";
+            StatusTextFooter = $"扫码 {barcode} → {target.DutId}";
+
+            await _dutMonitorManager.StartTestsForDutAsync(target.DutId).ConfigureAwait(true);
+            ScanBarcodeText = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            IsTestRunning = false;
+            StartTestButtonText = "▶ 开始测试";
+            LastScanResultText = "失败";
+            LastScanDetail = ex.Message;
+            LastScanResultBrush = new SolidColorBrush(Color.FromRgb(220, 53, 69));
+            StatusText = "扫码测试启动失败";
+            StatusTextFooter = $"扫码测试启动失败: {ex.Message}";
+            _logger?.Error("扫码测试启动失败", ex);
+            _dialogService.ShowError($"扫码测试启动失败: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private void ClearScanResult()
+    {
+        ScanBarcodeText = string.Empty;
+        _scanTargetDutId = null;
+        LastScanDutId = string.Empty;
+        LastScanResultText = "待扫码";
+        LastScanDetail = "扫描条码后按 Enter 启动测试";
+        LastScanResultBrush = new SolidColorBrush(Color.FromRgb(108, 117, 125));
+    }
+
+    private void RefreshScanResultFromDut()
+    {
+        if (string.IsNullOrEmpty(_scanTargetDutId))
+        {
+            return;
+        }
+
+        var dut = DUTItems.FirstOrDefault(d =>
+            string.Equals(d.DutId, _scanTargetDutId, StringComparison.OrdinalIgnoreCase));
+        if (dut is null)
+        {
+            return;
+        }
+
+        switch (dut.OverallStatus)
+        {
+            case DUTMonitorStatus.Passed:
+                LastScanResultText = "PASS";
+                LastScanResultBrush = new SolidColorBrush(Color.FromRgb(40, 167, 69));
+                LastScanDetail = $"{dut.DutId} · {dut.CurrentStepText}";
+                break;
+            case DUTMonitorStatus.Failed:
+            case DUTMonitorStatus.Error:
+            case DUTMonitorStatus.Timeout:
+                LastScanResultText = "FAIL";
+                LastScanResultBrush = new SolidColorBrush(Color.FromRgb(220, 53, 69));
+                LastScanDetail = $"{dut.DutId} · {dut.OverallStatusText} · {dut.CurrentStepText}";
+                break;
+            case DUTMonitorStatus.Running:
+                LastScanResultText = "测试中";
+                LastScanResultBrush = new SolidColorBrush(Color.FromRgb(255, 193, 7));
+                LastScanDetail = $"{dut.DutId} · {dut.CurrentStepText}";
+                break;
+            case DUTMonitorStatus.Idle:
+                // Keep prior terminal result unless we never started.
+                break;
+        }
+    }
 
     /// <summary>启动测试。</summary>
     [RelayCommand(CanExecute = nameof(CanExecuteStartTest))]
@@ -514,7 +879,16 @@ public partial class MainWindowViewModel : ObservableObject
             StartTestButtonText = "▶️ 测试进行中...";
             StatusText = "测试进行中...";
             StatusTextFooter = "测试进行中...";
-            await _dutMonitorManager.StartAllTestsAsync();
+
+            // SingleStation: prefer selected DUT only; other modes run all.
+            if (IsSingleStationMode && SelectedStationDut is not null)
+            {
+                await _dutMonitorManager.StartTestsForDutAsync(SelectedStationDut.DutId);
+            }
+            else
+            {
+                await _dutMonitorManager.StartAllTestsAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -593,6 +967,7 @@ public partial class MainWindowViewModel : ObservableObject
 
             await RefreshConfigurationAfterImportAsync();
             await RefreshConfigValidationAsync();
+            await LoadWorkbenchProfileFromConfigAsync(forceFromConfig: true).ConfigureAwait(true);
             _dialogService.ShowInformation("配置导入成功！");
         }
         catch (Exception ex)
@@ -954,6 +1329,7 @@ public partial class MainWindowViewModel : ObservableObject
             }
 
             UpdateStatistics();
+            await LoadWorkbenchProfileFromConfigAsync(forceFromConfig: true).ConfigureAwait(true);
             ConfigurationRefreshRequested?.Invoke(this, new WindowClosedEventArgs { Source = "Import" });
 
             _logger?.Info("配置刷新完成");
@@ -964,3 +1340,19 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 }
+
+/// <summary>ComboBox option for workbench mode selection.</summary>
+public sealed class WorkbenchModeOption
+{
+    public WorkbenchModeOption(string mode, string displayName)
+    {
+        Mode = mode;
+        DisplayName = displayName;
+    }
+
+    public string Mode { get; }
+    public string DisplayName { get; }
+
+    public override string ToString() => DisplayName;
+}
+

@@ -15,3 +15,4 @@ global using TestProjectConfiguration = UTF.Configuration.Models.TestProjectConf
 global using TestMode = UTF.Configuration.Models.TestMode;
 global using TestProject = UTF.Configuration.Models.TestProject;
 global using TestStepConfig = UTF.Configuration.Models.UnifiedTestStepConfig;
+global using UiProfile = UTF.Configuration.Models.UiProfile;

@@ -1,0 +1,132 @@
+<UserControl x:Class="UTF.UI.Views.MultiDutBoardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:UTF.UI"
+             xmlns:converters="clr-namespace:UTF.UI.Converters">
+    <UserControl.Resources>
+        <converters:LogLevelToColorConverter x:Key="LogLevelToColorConverter"/>
+    </UserControl.Resources>
+
+    <Border Background="White" CornerRadius="8" Margin="5">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="#495057" Padding="10,8">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="🎛️ DUT监控台" FontSize="12" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                    <TextBlock Text="使用上方工具栏进行测试控制" FontSize="10" Foreground="#ADB5BD" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                    <Button Content="🔄 刷新" Margin="3,0" Padding="8,4" FontSize="10"
+                            Command="{Binding RefreshDUTsCommand}"/>
+                    <Button Content="📤 导出报告" Margin="3,0" Padding="8,4" FontSize="10"
+                            Command="{Binding ExportReportCommand}"
+                            IsEnabled="{Binding CanExportReport}"/>
+                    <Button Content="🗑️ 清除日志" Margin="3,0" Padding="8,4" FontSize="10"
+                            Command="{Binding ClearAllLogsCommand}"
+                            IsEnabled="{Binding CanClearLogs}"/>
+                </StackPanel>
+            </Border>
+
+            <DataGrid Grid.Row="1" x:Name="MainDUTListDataGrid"
+                      ItemsSource="{Binding DUTItems}"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      GridLinesVisibility="Horizontal"
+                      HeadersVisibility="Column"
+                      AlternatingRowBackground="#F8F9FA"
+                      SelectionMode="Single"
+                      FontSize="10"
+                      RowHeight="35"
+                      EnableRowVirtualization="True"
+                      EnableColumnVirtualization="True"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.VirtualizationMode="Recycling"
+                      VirtualizingPanel.CacheLength="10,10"
+                      VirtualizingPanel.CacheLengthUnit="Item"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto">
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn Header="DUT信息" Width="140">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="3">
+                                    <TextBlock Text="{Binding DutId}" FontWeight="Bold" FontSize="10"/>
+                                    <TextBlock Text="{Binding DutName}" FontSize="8" Foreground="#6C757D"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTemplateColumn Header="综合结果" Width="140" MinWidth="120">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding OverallStatusBrush}" CornerRadius="5" Padding="6,3" Margin="2">
+                                    <TextBlock Text="{Binding OverallResultText}"
+                                               Foreground="White"
+                                               FontWeight="Bold"
+                                               FontSize="11"
+                                               TextAlignment="Center"/>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTemplateColumn Header="当前步骤" Width="140" MinWidth="120">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding CurrentStepText}" FontWeight="Bold" FontSize="9" Margin="3" VerticalAlignment="Center"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- 动态测试步骤列将在代码中生成 -->
+
+                    <DataGridTemplateColumn Header="最新日志 (右键操作)" Width="*" MinWidth="300">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Padding="3" Background="#F8F9FA" CornerRadius="3">
+                                    <Border.ContextMenu>
+                                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                            <MenuItem Header="📝 查看完整日志"
+                                                      Command="{Binding DataContext.ViewDutLogCommand, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}"
+                                                      CommandParameter="{Binding}"/>
+                                            <MenuItem Header="📊 详细信息"
+                                                      Command="{Binding DataContext.ViewDutDetailCommand, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}"
+                                                      CommandParameter="{Binding}"/>
+                                            <Separator/>
+                                            <MenuItem Header="🔧 重新测试"
+                                                      Command="{Binding DataContext.RetestDutCommand, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}"
+                                                      CommandParameter="{Binding}"/>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" MaxHeight="30">
+                                        <ItemsControl ItemsSource="{Binding RecentLogs}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding DisplayText}"
+                                                               FontFamily="Consolas"
+                                                               FontSize="8"
+                                                               Foreground="{Binding Level, Converter={StaticResource LogLevelToColorConverter}}"
+                                                               TextWrapping="Wrap"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Margin="0,0,0,1"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+    </Border>
+</UserControl>

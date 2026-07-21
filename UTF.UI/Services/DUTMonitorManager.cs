@@ -96,7 +96,19 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
         AttachToDataGrid(dataGrid);
     }
 
-    public async Task StartAllTestsAsync(CancellationToken cancellationToken = default)
+    public Task StartAllTestsAsync(CancellationToken cancellationToken = default)
+        => StartTestsCoreAsync(dutIds: null, cancellationToken);
+
+    /// <summary>
+    /// Starts a test session for a single DUT (ScanToTest / SingleStation paths).
+    /// </summary>
+    public Task StartTestsForDutAsync(string dutId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dutId);
+        return StartTestsCoreAsync(new[] { dutId }, cancellationToken);
+    }
+
+    private async Task StartTestsCoreAsync(IReadOnlyList<string>? dutIds, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -113,7 +125,10 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
             throw new InvalidOperationException("测试项目已禁用。");
         }
 
-        var candidates = DUTItems.Where(item => item.OverallStatus != DUTMonitorStatus.Running).ToList();
+        var candidates = DUTItems
+            .Where(item => item.OverallStatus != DUTMonitorStatus.Running)
+            .Where(item => dutIds is null || dutIds.Any(id => string.Equals(id, item.DutId, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
         if (candidates.Count == 0)
         {
             throw new InvalidOperationException("没有可执行测试的 DUT。");
@@ -640,11 +655,11 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
         }
     }
 
-    private Task GenerateDynamicColumnsAsync()
+    private async Task GenerateDynamicColumnsAsync()
     {
         if (_dataGrid == null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         foreach (var column in _dynamicColumns)
@@ -653,6 +668,7 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
         }
         _dynamicColumns.Clear();
 
+        // Honour UiProfile.ShowStepColumns property (set from MainWindow / config).
         if (!ShowStepColumns)
         {
             return Task.CompletedTask;
@@ -666,8 +682,6 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
             _dataGrid.Columns.Insert(insertionIndex + index, column);
             _dynamicColumns.Add(column);
         }
-
-        return Task.CompletedTask;
     }
 
     private static DataGridTemplateColumn CreateStepColumn(string name, int index)

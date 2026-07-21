@@ -1,0 +1,98 @@
+<UserControl x:Class="UTF.UI.Views.SingleStationView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:UTF.UI.Converters">
+    <UserControl.Resources>
+        <converters:LogLevelToColorConverter x:Key="LogLevelToColorConverter"/>
+    </UserControl.Resources>
+
+    <Border Background="White" CornerRadius="8" Margin="5">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+        </Border.Effect>
+        <Grid Margin="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*" MinHeight="120"/>
+                <RowDefinition Height="*" MinHeight="100"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header + DUT selector -->
+            <DockPanel Grid.Row="0" Margin="0,0,0,12">
+                <TextBlock Text="🔧 单工位工作台" FontSize="14" FontWeight="Bold" Foreground="#1565C0" VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock Text="选择 DUT:" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#546E7A"/>
+                    <ComboBox Width="200"
+                              ItemsSource="{Binding DUTItems}"
+                              SelectedItem="{Binding SelectedStationDut, Mode=TwoWay}"
+                              DisplayMemberPath="DutId"/>
+                </StackPanel>
+            </DockPanel>
+
+            <!-- Large status -->
+            <Border Grid.Row="1" CornerRadius="10" Padding="20,16" Margin="0,0,0,12"
+                    Background="{Binding SelectedStationDut.OverallStatusBrush, FallbackValue=#6C757D}">
+                <StackPanel HorizontalAlignment="Center">
+                    <TextBlock Text="{Binding SelectedStationDut.DutId, FallbackValue='—'}"
+                               FontSize="18" FontWeight="SemiBold" Foreground="White"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="{Binding SelectedStationDut.OverallResultText, FallbackValue='未选择 DUT'}"
+                               FontSize="36" FontWeight="Bold" Foreground="White"
+                               HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                    <TextBlock Text="{Binding SelectedStationDut.CurrentStepText, TargetNullValue=''}"
+                               FontSize="14" Foreground="#F5F5F5"
+                               HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Step list -->
+            <Border Grid.Row="2" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="6" Margin="0,0,0,12" Padding="8">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="步骤状态" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,6" Foreground="#37474F"/>
+                    <ListBox ItemsSource="{Binding SelectedStationDut.TestSteps}"
+                             BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="2,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="36"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="60"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="{Binding StatusBrush}" CornerRadius="4" Padding="4,2" Margin="0,0,8,0">
+                                        <TextBlock Text="{Binding StatusText}" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{Binding StepName}" VerticalAlignment="Center" FontSize="12"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding Status}" VerticalAlignment="Center" FontSize="11" Foreground="#6C757D" Margin="8,0"/>
+                                    <TextBlock Grid.Column="3" Text="{Binding Duration}" VerticalAlignment="Center" FontSize="11" Foreground="#6C757D" HorizontalAlignment="Right"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Log tail -->
+            <Border Grid.Row="3" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="6" Padding="8" Background="#FAFAFA">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="日志" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,6" Foreground="#37474F"/>
+                    <ListBox ItemsSource="{Binding SelectedStationDut.RecentLogs}"
+                             BorderThickness="0" Background="Transparent"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplayText}"
+                                           FontFamily="Consolas" FontSize="11"
+                                           Foreground="{Binding Level, Converter={StaticResource LogLevelToColorConverter}}"
+                                           TextWrapping="Wrap"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

@@ -143,6 +143,21 @@ public sealed class MainWindowViewModelTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
+    public void ApplyWorkbenchMode_SingleStation_SetsModeFlags()
+    {
+        Assert.True(_viewModel.IsMultiDutBoardMode);
+
+        _viewModel.ApplyWorkbenchMode("SingleStation", isSessionOverride: true);
+
+        Assert.Equal(WorkbenchModes.SingleStation, _viewModel.WorkbenchMode);
+        Assert.True(_viewModel.IsSingleStationMode);
+        Assert.False(_viewModel.IsMultiDutBoardMode);
+        Assert.False(_viewModel.IsScanToTestMode);
+        Assert.False(_viewModel.IsInstrumentBenchMode);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void OpenTemplatePackPickerCommand_InvokesWindowFactory()
     {
         _permissionManager.HasPermission(Permission.SystemConfig).Returns(true);
@@ -151,6 +166,16 @@ public sealed class MainWindowViewModelTests : IDisposable
         _viewModel.OpenTemplatePackPickerCommand.Execute(null);
 
         _windowFactory.Received(1).ShowTemplatePackPickerDialog();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyWorkbenchMode_UnknownMode_FallsBackToMultiDutBoard()
+    {
+        _viewModel.ApplyWorkbenchMode("NotARealMode", isSessionOverride: true);
+
+        Assert.Equal(WorkbenchModes.MultiDutBoard, _viewModel.WorkbenchMode);
+        Assert.True(_viewModel.IsMultiDutBoardMode);
     }
 
     [Fact]

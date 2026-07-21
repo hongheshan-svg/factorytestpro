@@ -114,10 +114,11 @@ public partial class MainWindow : Window
         {
             await _viewModel.LoadUiProfileFromConfigAsync();
             // Re-attach grid so ShowStepColumns takes effect on dynamic columns.
-            if (MainDUTListDataGrid != null)
+            var dutGrid = MultiDutBoardPanel?.DutDataGrid;
+            if (dutGrid != null)
             {
                 _dutMonitorManager.ShowStepColumns = _viewModel.ShowStepColumns;
-                _dutMonitorManager.AttachToDataGrid(MainDUTListDataGrid);
+                _dutMonitorManager.AttachToDataGrid(dutGrid);
             }
         }
         catch (Exception ex)
@@ -139,7 +140,13 @@ public partial class MainWindow : Window
             // MVVM: InitializeAsync 不再需要 DataGrid 参数；ItemsSource 由 XAML 绑定 DUTItems。
             // 动态列生成通过 AttachToDataGrid 显式调用，确保列结构正确。
             await _dutMonitorManager.InitializeAsync();
-            _dutMonitorManager.AttachToDataGrid(MainDUTListDataGrid);
+            var dutGrid = MultiDutBoardPanel?.DutDataGrid;
+            if (dutGrid != null)
+            {
+                _dutMonitorManager.AttachToDataGrid(dutGrid);
+            }
+
+            await _viewModel.LoadWorkbenchProfileFromConfigAsync(forceFromConfig: true);
             System.Diagnostics.Debug.WriteLine("DUT监控台管理器初始化成功");
             _viewModel.UpdatePluginStatus();
         }
@@ -148,7 +155,12 @@ public partial class MainWindow : Window
             System.Diagnostics.Debug.WriteLine($"初始化DUT列表失败: {ex.Message}");
             _logger?.Error("DUT监控台管理器初始化失败", ex);
 
-            MainDUTListDataGrid.ItemsSource = _dutMonitorManager.DUTItems;
+            var dutGrid = MultiDutBoardPanel?.DutDataGrid;
+            if (dutGrid != null)
+            {
+                dutGrid.ItemsSource = _dutMonitorManager.DUTItems;
+            }
+
             LoadSimulatedDUTs();
         }
     }
@@ -261,18 +273,19 @@ public partial class MainWindow : Window
     {
         try
         {
+            var dutGrid = MultiDutBoardPanel?.DutDataGrid;
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                if (_dutMonitorManager != null && MainDUTListDataGrid != null)
+                if (_dutMonitorManager != null && dutGrid != null)
                 {
-                    MainDUTListDataGrid.ItemsSource = null;
-                    MainDUTListDataGrid.Items.Refresh();
+                    dutGrid.ItemsSource = null;
+                    dutGrid.Items.Refresh();
                 }
             });
 
-            if (_dutMonitorManager != null && MainDUTListDataGrid != null)
+            if (_dutMonitorManager != null && dutGrid != null)
             {
-                _dutMonitorManager.AttachToDataGrid(MainDUTListDataGrid);
+                _dutMonitorManager.AttachToDataGrid(dutGrid);
             }
 
             await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -282,6 +295,7 @@ public partial class MainWindow : Window
             });
 
             await _viewModel.RefreshConfigValidationAsync();
+            await _viewModel.LoadWorkbenchProfileFromConfigAsync(forceFromConfig: true);
         }
         catch (Exception ex)
         {
@@ -331,11 +345,13 @@ public partial class MainWindow : Window
             // round-tripping through a ThreadPool task + Dispatcher.Invoke.
             RefreshProductModelDisplay();
             _viewModel.UpdateStatistics();
+            await _viewModel.LoadWorkbenchProfileFromConfigAsync(forceFromConfig: true);
 
-            if (MainDUTListDataGrid != null)
+            var dutGrid = MultiDutBoardPanel?.DutDataGrid;
+            if (dutGrid != null)
             {
                 _dutMonitorManager.ShowStepColumns = _viewModel.ShowStepColumns;
-                _dutMonitorManager.AttachToDataGrid(MainDUTListDataGrid);
+                _dutMonitorManager.AttachToDataGrid(dutGrid);
             }
 
             await RefreshStepPreviewAsync();

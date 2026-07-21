@@ -1,0 +1,49 @@
+<UserControl x:Class="UTF.UI.Views.InstrumentBenchView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Background="White" CornerRadius="8" Margin="5">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="4" ShadowDepth="2" Opacity="0.1" Color="Gray"/>
+        </Border.Effect>
+        <Grid Margin="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <DockPanel Grid.Row="0" Margin="0,0,0,12">
+                <TextBlock Text="🔌 仪器台" FontSize="14" FontWeight="Bold" Foreground="#1565C0" VerticalAlignment="Center"/>
+                <TextBlock DockPanel.Dock="Right" Text="轻量端点一览（非完整仪器控制）"
+                           FontSize="11" Foreground="#90A4AE" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+            </DockPanel>
+
+            <DataGrid Grid.Row="1"
+                      ItemsSource="{Binding InstrumentEndpoints}"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      IsReadOnly="True"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="Horizontal"
+                      AlternatingRowBackground="#F8F9FA"
+                      FontSize="12"
+                      RowHeight="32"
+                      BorderBrush="#E0E0E0"
+                      BorderThickness="1">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="类型" Binding="{Binding Kind}" Width="100"/>
+                    <DataGridTextColumn Header="地址 / 端口" Binding="{Binding Address}" Width="*"/>
+                    <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="100"/>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Grid.Row="2" Background="#ECEFF1" CornerRadius="6" Padding="12" Margin="0,12,0,0">
+                <StackPanel>
+                    <TextBlock Text="上次会话摘要" FontWeight="SemiBold" FontSize="12" Foreground="#37474F" Margin="0,0,0,6"/>
+                    <TextBlock Text="{Binding SessionSummaryText}" FontSize="12" Foreground="#546E7A" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>
