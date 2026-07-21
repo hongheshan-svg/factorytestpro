@@ -18,7 +18,7 @@ public class CompositeConfigurationValidatorTests
             new TestConfigValidator());
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateAll_AllValidConfigs_ReturnsValid()
     {
         // Arrange
@@ -51,7 +51,7 @@ public class CompositeConfigurationValidatorTests
         Assert.Equal(3, result.SectionResults.Count);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateAll_AllNull_ReturnsThreeErrors()
     {
         // Act
@@ -65,7 +65,7 @@ public class CompositeConfigurationValidatorTests
         Assert.Contains(result.AllErrors, e => e.Contains("TestProjectConfiguration"));
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateAll_OnlySystemNull_ReturnsSystemError()
     {
         // Arrange
@@ -81,7 +81,7 @@ public class CompositeConfigurationValidatorTests
         Assert.Contains("SystemSettings", result.AllErrors[0]);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateAll_InvalidSystemConfig_ReturnsValidationErrors()
     {
         // Arrange
@@ -102,7 +102,7 @@ public class CompositeConfigurationValidatorTests
         Assert.All(result.AllErrors, e => Assert.StartsWith("[SystemSettings]", e));
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateAll_InvalidDUTConfig_ReturnsValidationErrors()
     {
         // Arrange
@@ -118,7 +118,7 @@ public class CompositeConfigurationValidatorTests
         Assert.Contains(result.AllErrors, e => e.Contains("[DUTConfiguration]"));
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateAll_DuplicateStepIds_ReturnsTestConfigError()
     {
         // Arrange
@@ -142,7 +142,7 @@ public class CompositeConfigurationValidatorTests
         Assert.Contains(result.AllErrors, e => e.Contains("步骤ID存在重复"));
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateAll_MixedErrors_AggregatesAllSections()
     {
         // Arrange
@@ -160,7 +160,7 @@ public class CompositeConfigurationValidatorTests
         Assert.Contains(result.AllErrors, e => e.Contains("[TestProjectConfiguration]"));
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void SectionResults_ContainsAllThreeSections()
     {
         // Act

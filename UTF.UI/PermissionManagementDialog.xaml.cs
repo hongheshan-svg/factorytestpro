@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using UTF.UI.Models;
 using UTF.UI.Services;
 
 namespace UTF.UI;
@@ -128,17 +129,17 @@ public partial class PermissionManagementDialog : Window
         }
     }
     
-    private void SaveBtn_Click(object sender, RoutedEventArgs e)
+    private async void SaveBtn_Click(object sender, RoutedEventArgs e)
     {
         try
         {
             // 收集自定义权限（非角色默认权限）
             var customPermissions = new List<Permission>();
             var rolePermissions = GetRolePermissions(_user.Role);
-            
+
             foreach (var checkBox in _allPermissionCheckBoxes)
             {
-                if (checkBox.IsChecked == true && checkBox.IsEnabled && 
+                if (checkBox.IsChecked == true && checkBox.IsEnabled &&
                     Enum.TryParse<Permission>(checkBox.Tag.ToString(), out var permission))
                 {
                     // 只保存非角色默认的自定义权限
@@ -148,10 +149,10 @@ public partial class PermissionManagementDialog : Window
                     }
                 }
             }
-            
-            // 更新用户权限
-            var result = _permissionManager.UpdateUserPermissionsAsync(_user.Username, _user.Role, customPermissions).Result;
-            
+
+            // P1-7: await directly instead of .Result (avoid sync-over-async deadlock on UI thread)
+            var result = await _permissionManager.UpdateUserPermissionsAsync(_user.Username, _user.Role, customPermissions);
+
             if (result)
             {
                 MessageBox.Show("权限更新成功！", "操作成功", MessageBoxButton.OK, MessageBoxImage.Information);

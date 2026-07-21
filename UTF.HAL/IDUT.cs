@@ -218,15 +218,23 @@ public sealed record PowerControlResult
 /// <summary>
 /// 待测设备(DUT)接口
 /// </summary>
+[Obsolete("Device abstraction is superseded by the plugin-based driver stack (UTF.Plugins.Drivers). Will be removed in a future version.")]
 public interface IDUT : IDevice
 {
     /// <summary>DUT信息</summary>
     DUTInfo DUTInfo { get; }
-    
+
     /// <summary>测试结果事件</summary>
     event EventHandler<TestResult>? TestCompleted;
-    
-    /// <summary>DUT状态变化事件</summary>
+
+    /// <summary>
+    /// DUT状态变化事件。
+    /// 注意：此处使用 <c>new</c> 显式隐藏基接口 <see cref="IDevice.StatusChanged"/>
+    /// （基接口为 <c>EventHandler&lt;DeviceEventArgs&gt;</c>，本接口为
+    /// <c>EventHandler&lt;DUTStatus&gt;</c>）。这是有意为之，以便 DUT 的状态变化
+    /// 以更具体的 <see cref="DUTStatus"/> 携带。实现者应同时为两个事件成员提供实现
+    /// （或使用显式接口实现分离二者）。将来统一到插件驱动栈后会移除此双事件设计。
+    /// </summary>
     new event EventHandler<DUTStatus>? StatusChanged;
     
     /// <summary>上电</summary>

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using UTF.UI.Models;
 using UTF.UI.Services;
 
 namespace UTF.UI;
@@ -29,9 +30,23 @@ public partial class DeviceManagementWindow : Window
     {
         // 根据权限控制功能可用性
         CheckPermissions();
-        
+
+        // P2-14: toolbar actions whose handlers only show "待实现" (not yet implemented) dialogs
+        // are disabled here with a tooltip so we never ship TODO dialogs.
+        DisableUnimplementedToolbarActions();
+
         // 初始化状态
         StatusTextBlock.Text = "设备管理系统已就绪";
+    }
+
+    private void DisableUnimplementedToolbarActions()
+    {
+        const string tooltip = "尚未实现 / Not yet implemented";
+        foreach (var btn in new[] { AddDeviceBtn, ScanDevicesBtn, ImportConfigBtn, ExportConfigBtn })
+        {
+            btn.IsEnabled = false;
+            btn.ToolTip = tooltip;
+        }
     }
     
     private void CheckPermissions()
@@ -91,12 +106,14 @@ public partial class DeviceManagementWindow : Window
             return;
         }
 
-        MessageBox.Show("设备管理功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented — no TODO dialog; surface as status text only.
+        StatusTextBlock.Text = "添加设备功能尚未实现";
     }
 
     private void ScanDevicesBtn_Click(object sender, RoutedEventArgs e)
     {
-        MessageBox.Show("设备扫描功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented — no TODO dialog.
+        StatusTextBlock.Text = "设备扫描功能尚未实现";
     }
 
     private void ImportConfigBtn_Click(object sender, RoutedEventArgs e)
@@ -107,7 +124,8 @@ public partial class DeviceManagementWindow : Window
             return;
         }
 
-        MessageBox.Show("导入配置功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented.
+        StatusTextBlock.Text = "导入配置功能尚未实现";
     }
 
     private void ExportConfigBtn_Click(object sender, RoutedEventArgs e)
@@ -118,7 +136,8 @@ public partial class DeviceManagementWindow : Window
             return;
         }
 
-        MessageBox.Show("导出配置功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented.
+        StatusTextBlock.Text = "导出配置功能尚未实现";
     }
     
     // 筛选事件处理
@@ -159,7 +178,8 @@ public partial class DeviceManagementWindow : Window
     // 仪器设备操作
     private void ConnectDevice_Click(object sender, RoutedEventArgs e)
     {
-        MessageBox.Show("设备连接功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented — no TODO dialog.
+        StatusTextBlock.Text = "设备连接功能尚未实现";
     }
 
     private void ConfigDevice_Click(object sender, RoutedEventArgs e)
@@ -169,7 +189,8 @@ public partial class DeviceManagementWindow : Window
             MessageBox.Show("您没有设备配置权限", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        MessageBox.Show("设备配置功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented.
+        StatusTextBlock.Text = "设备配置功能尚未实现";
     }
 
     private void CalibrateDevice_Click(object sender, RoutedEventArgs e)
@@ -179,7 +200,8 @@ public partial class DeviceManagementWindow : Window
             MessageBox.Show("您没有设备校准权限", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        MessageBox.Show("设备校准功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented.
+        StatusTextBlock.Text = "设备校准功能尚未实现";
     }
 
     private void DeleteDevice_Click(object sender, RoutedEventArgs e)
@@ -189,13 +211,15 @@ public partial class DeviceManagementWindow : Window
             MessageBox.Show("您没有设备管理权限", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        MessageBox.Show("删除设备功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented.
+        StatusTextBlock.Text = "删除设备功能尚未实现";
     }
 
     // DUT设备操作
     private void ConnectDut_Click(object sender, RoutedEventArgs e)
     {
-        MessageBox.Show("DUT连接功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented.
+        StatusTextBlock.Text = "DUT连接功能尚未实现";
     }
 
     private void ConfigDut_Click(object sender, RoutedEventArgs e)
@@ -205,7 +229,8 @@ public partial class DeviceManagementWindow : Window
             MessageBox.Show("您没有DUT配置权限", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        MessageBox.Show("DUT配置功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented.
+        StatusTextBlock.Text = "DUT配置功能尚未实现";
     }
 
     private void TestDut_Click(object sender, RoutedEventArgs e)
@@ -215,7 +240,8 @@ public partial class DeviceManagementWindow : Window
             MessageBox.Show("您没有测试执行权限", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        MessageBox.Show("DUT测试功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented.
+        StatusTextBlock.Text = "DUT测试功能尚未实现";
     }
 
     private void DeleteDut_Click(object sender, RoutedEventArgs e)
@@ -225,9 +251,10 @@ public partial class DeviceManagementWindow : Window
             MessageBox.Show("您没有DUT管理权限", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        MessageBox.Show("删除DUT功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented.
+        StatusTextBlock.Text = "删除DUT功能尚未实现";
     }
-    
+
     // 配置保存
     private void SaveConfig_Click(object sender, RoutedEventArgs e)
     {
@@ -237,7 +264,8 @@ public partial class DeviceManagementWindow : Window
             return;
         }
 
-        MessageBox.Show("配置保存功能待实现", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        // P2-14: not yet implemented — no TODO dialog.
+        StatusTextBlock.Text = "配置保存功能尚未实现";
     }
 
     private void ResetConfig_Click(object sender, RoutedEventArgs e)
@@ -267,32 +295,3 @@ public partial class DeviceManagementWindow : Window
     }
 }
 
-/// <summary>
-/// 仪器设备信息
-/// </summary>
-public class InstrumentDeviceInfo
-{
-    public string DeviceId { get; set; } = "";
-    public string DeviceName { get; set; } = "";
-    public string DeviceType { get; set; } = "";
-    public string Manufacturer { get; set; } = "";
-    public string Model { get; set; } = "";
-    public string ConnectionType { get; set; } = "";
-    public string ConnectionAddress { get; set; } = "";
-    public string Status { get; set; } = "";
-}
-
-/// <summary>
-/// DUT设备信息
-/// </summary>
-public class DutDeviceInfo
-{
-    public string DutId { get; set; } = "";
-    public string DutName { get; set; } = "";
-    public string DutType { get; set; } = "";
-    public string Manufacturer { get; set; } = "";
-    public string Model { get; set; } = "";
-    public string CommunicationType { get; set; } = "";
-    public string ConnectionParams { get; set; } = "";
-    public string Status { get; set; } = "";
-}

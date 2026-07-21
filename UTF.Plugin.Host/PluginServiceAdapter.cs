@@ -21,15 +21,31 @@ public class PluginServiceAdapter : IPluginService
 
     public async Task<bool> InitializeAsync(CancellationToken ct = default)
     {
-        await _pluginHost.InitializeAsync(ct);
-        return true;
+        var report = await _pluginHost.InitializeAsync(ct).ConfigureAwait(false);
+        return report.FailedCount == 0;
     }
 
+    /// <summary>
+    /// 判断是否存在可处理指定步骤类型与通道的插件。
+    /// 采用 AND 语义：stepType 与 channel 必须同时匹配；任一方声明 "*" 通配符则视为该侧恒匹配。
+    /// </summary>
     public bool CanHandle(string stepType, string channel)
     {
         return _pluginHost.LoadedPlugins.Any(p =>
-            p.SupportedStepTypes.Contains(stepType) &&
-            p.SupportedChannels.Contains(channel));
+            MatchesSide(p.SupportedStepTypes, stepType) &&
+            MatchesSide(p.SupportedChannels, channel));
+
+        static bool MatchesSide(IReadOnlyList<string> supported, string value)
+        {
+            // 任一方声明 "*" 通配符即视为匹配：插件支持的集合含 "*"，或请求值为 "*"。
+            if (supported.Contains("*", StringComparer.OrdinalIgnoreCase) ||
+                string.Equals(value, "*", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return supported.Contains(value, StringComparer.OrdinalIgnoreCase);
+        }
     }
 
     public async Task<StepExecutionResult> ExecuteAsync(StepExecutionRequest request, CancellationToken ct)

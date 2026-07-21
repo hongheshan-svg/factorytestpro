@@ -12,5 +12,6 @@ public interface IConfigurationAdapter
     string GetNamingTemplate(UnifiedConfiguration config);
     string GetIdTemplate(UnifiedConfiguration config);
     bool ValidateConfiguration(UnifiedConfiguration config);
+    List<string> ValidateConfigurationWithErrors(UnifiedConfiguration config);
     string GetConfigurationSummary(UnifiedConfiguration config);
 }

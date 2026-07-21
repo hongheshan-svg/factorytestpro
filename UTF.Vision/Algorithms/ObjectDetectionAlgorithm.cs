@@ -130,10 +130,11 @@ namespace UTF.Vision.Algorithms
                 _logger.Debug($"开始目标检测: {image.Width}x{image.Height}");
                 
                 // 获取检测参数
-                var targetType = parameters.GetValueOrDefault("target_type", "circle").ToString();
+                var targetType = parameters.GetValueOrDefault("target_type", "circle").ToString() ?? "circle";
                 var confidence = Convert.ToDouble(parameters.GetValueOrDefault("min_confidence", 0.7));
                 var maxObjects = Convert.ToInt32(parameters.GetValueOrDefault("max_objects", 50));
-                var searchRegions = parameters.GetValueOrDefault("search_regions", null) as List<Rectangle>;
+                parameters.TryGetValue("search_regions", out var searchRegionsValue);
+                var searchRegions = searchRegionsValue as List<Rectangle>;
                 
                 // 执行目标检测
                 var detectedObjects = await DetectObjectsAsync(image, targetType, confidence, maxObjects, searchRegions);
@@ -398,7 +399,7 @@ namespace UTF.Vision.Algorithms
                 if (parameters.ContainsKey("target_type"))
                 {
                     var targetType = parameters["target_type"].ToString();
-                    if (!_objectTemplates.ContainsKey(targetType))
+                    if (!_objectTemplates.ContainsKey(targetType ?? string.Empty))
                         return false;
                 }
                 

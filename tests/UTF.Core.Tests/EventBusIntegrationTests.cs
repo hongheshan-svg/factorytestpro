@@ -27,7 +27,7 @@ public class EventBusIntegrationTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact][Trait("Category","Integration")]
     public async Task PublishAsync_WithSubscriber_ReceivesEvent()
     {
         var bus = new EventBus(_logger);
@@ -46,7 +46,7 @@ public class EventBusIntegrationTests : IDisposable
         Assert.True(received.Passed);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Integration")]
     public async Task PublishAsync_NoSubscribers_DoesNotThrow()
     {
         var bus = new EventBus(_logger);
@@ -54,7 +54,7 @@ public class EventBusIntegrationTests : IDisposable
         await bus.PublishAsync(new TestStartedEvent("DUT1", "T1", DateTime.UtcNow));
     }
 
-    [Fact]
+    [Fact][Trait("Category","Integration")]
     public async Task Subscribe_Dispose_Unsubscribes()
     {
         var bus = new EventBus(_logger);
@@ -75,7 +75,7 @@ public class EventBusIntegrationTests : IDisposable
         Assert.Equal(1, callCount);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Integration")]
     public async Task PublishAsync_MultipleSubscribers_AllReceive()
     {
         var bus = new EventBus(_logger);
@@ -100,7 +100,7 @@ public class EventBusIntegrationTests : IDisposable
         Assert.Contains("sub2:S1", received);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Integration")]
     public async Task Engine_PublishesEvents_WhenEventBusProvided()
     {
         var bus = new EventBus(_logger);
@@ -129,7 +129,7 @@ public class EventBusIntegrationTests : IDisposable
         Assert.Contains(events, e => e is TestCompletedEvent);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Integration")]
     public async Task Engine_DoesNotThrow_WhenEventBusNull()
     {
         var engine = new ConfigDrivenTestEngine(_logger);

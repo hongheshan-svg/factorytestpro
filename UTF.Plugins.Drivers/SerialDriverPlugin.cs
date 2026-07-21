@@ -66,10 +66,16 @@ public sealed class SerialDriverPlugin : DeviceDriverPluginBase
 
     public override bool CanHandle(string stepType, string channel)
     {
-        var normalizedType = (stepType ?? string.Empty).Trim().ToLowerInvariant();
-        var normalizedChannel = (channel ?? string.Empty).Trim().ToLowerInvariant();
-        return normalizedType is "serial" or "uart" or "rs232" or "rs485"
-            || normalizedChannel is "serial" or "uart" or "com";
+        // AND 语义：stepType 与 channel 必须同时匹配（各集合均可含 "*" 通配符）。
+        var supportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "serial", "uart", "rs232", "rs485"
+        };
+        var supportedChannels = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "serial", "uart", "com"
+        };
+        return DefaultCanHandle(stepType ?? string.Empty, channel ?? string.Empty, supportedTypes, supportedChannels);
     }
 
     protected override string ResolveEndpoint(StepExecutionRequest request)
@@ -117,34 +123,51 @@ public sealed class SerialDriverPlugin : DeviceDriverPluginBase
             throw new InvalidOperationException("串口未打开");
         }
 
+        var baseStream = _serialPort.BaseStream
+            ?? throw new InvalidOperationException("串口基础流不可用");
         _serialPort.DiscardInBuffer();
         _serialPort.Write(command + _lineEnding);
 
-        // 等待响应
-        var buffer = new StringBuilder();
-        var noDataCount = 0;
-        var maxNoDataCycles = 20;
+        // 用链接取消令牌施加读取超时上限，避免轮询 BytesToRead 的忙等。
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        linkedCts.CancelAfter(_readTimeoutMs);
 
-        while (!ct.IsCancellationRequested)
+        var buffer = new byte[4096];
+        var response = new StringBuilder();
+
+        try
         {
-            await Task.Delay(100, ct);
-
-            if (_serialPort.BytesToRead > 0)
+            while (!linkedCts.IsCancellationRequested)
             {
-                buffer.Append(_serialPort.ReadExisting());
-                noDataCount = 0;
-            }
-            else
-            {
-                noDataCount++;
-                if (noDataCount >= maxNoDataCycles || buffer.Length > 0)
+                int bytesRead;
+                try
                 {
+                    bytesRead = await baseStream.ReadAsync(buffer.AsMemory(0, buffer.Length), linkedCts.Token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && !ct.IsCancellationRequested)
+                {
+                    // 读取超时：返回已收到的内容（若有）。
+                    break;
+                }
+
+                if (bytesRead > 0)
+                {
+                    response.Append(_serialPort.Encoding.GetString(buffer, 0, bytesRead));
+                }
+                else
+                {
+                    // 对端关闭或无更多数据
                     break;
                 }
             }
         }
+        catch
+        {
+            // 串口读取异常：返回已收到的内容
+        }
 
-        return buffer.ToString().Trim();
+        return response.ToString().Trim();
     }
 
     protected override Task DisconnectCoreAsync(CancellationToken ct)

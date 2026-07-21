@@ -32,7 +32,7 @@ Use these commands before opening a pull request:
 ```powershell
 dotnet restore UniversalTestFramework.sln
 dotnet build UniversalTestFramework.sln -c Debug
-dotnet test tests/UTF.Core.Tests/UTF.Core.Tests.csproj --logger "console;verbosity=minimal"
+dotnet test UniversalTestFramework.sln --logger "console;verbosity=minimal"
 ```
 
 If your change affects the WPF app or plugin packaging, also validate:

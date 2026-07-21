@@ -22,7 +22,10 @@ public sealed class DeviceManager : IDeviceManager, IDisposable
     private readonly ILogger? _logger;
     private readonly ICache _cache;
     private readonly SemaphoreSlim _deviceSemaphore = new(1, 1);
-    
+
+    // 健康检查重入闸门：1 = 进行中，0 = 空闲。配合 Timer 回调防止上一次检查尚未结束就开始下一次。
+    private int _healthCheckInProgress;
+
     private bool _disposed = false;
 
     public DeviceManager(ILogger? logger = null, ICache? cache = null)
@@ -91,7 +94,7 @@ public sealed class DeviceManager : IDeviceManager, IDisposable
             if (_registeredDevices.TryAdd(device.DeviceId, device))
             {
                 // 更新缓存
-                await _cache.SetAsync($"device_{device.DeviceId}", device, TimeSpan.FromMinutes(5));
+                await _cache.SetAsync($"device_{device.DeviceId}", device, TimeSpan.FromMinutes(5), cancellationToken);
                 
                 DeviceStatusChanged?.Invoke(this, new DeviceEventArgs
                 {
@@ -128,7 +131,7 @@ public sealed class DeviceManager : IDeviceManager, IDisposable
             if (_registeredDevices.TryRemove(deviceId, out var device))
             {
                 // 清除缓存
-                await _cache.RemoveAsync($"device_{deviceId}");
+                await _cache.RemoveAsync($"device_{deviceId}", cancellationToken);
                 
                 // 如果设备已连接，先断开连接
                 if (device.ConnectionStatus == DeviceConnectionStatus.Connected)
@@ -176,7 +179,8 @@ public sealed class DeviceManager : IDeviceManager, IDisposable
                 await Task.Delay(10, cancellationToken);
                 return _registeredDevices.TryGetValue(deviceId, out var device) ? device : null;
             },
-            TimeSpan.FromMinutes(5)  // 缓存5分钟
+            TimeSpan.FromMinutes(5),  // 缓存5分钟
+            cancellationToken
         );
     }
 
@@ -613,6 +617,12 @@ public sealed class DeviceManager : IDeviceManager, IDisposable
 
     private void HealthCheckCallback(object? state)
     {
+        // 重入闸门：若上一次健康检查尚未结束，直接跳过本次回调，避免并发检查导致设备状态竞争。
+        if (Interlocked.CompareExchange(ref _healthCheckInProgress, 1, 0) != 0)
+        {
+            return;
+        }
+
         _ = Task.Run(async () =>
         {
             try
@@ -623,33 +633,80 @@ public sealed class DeviceManager : IDeviceManager, IDisposable
             {
                 _logger?.Error($"定期设备健康检查失败: {ex.Message}");
             }
+            finally
+            {
+                Interlocked.Exchange(ref _healthCheckInProgress, 0);
+            }
         });
     }
 
+    /// <summary>
+    /// 同步释放。仅释放托管资源（定时器、信号量、缓存），不执行设备断开流程，
+    /// 以避免 fire-and-forget 引发与 <see cref="_registeredDevices"/> 清空的竞态。
+    /// 需要优雅断开设备时，请使用 <see cref="DisposeAsync"/>。
+    /// </summary>
     public void Dispose()
     {
-        if (!_disposed)
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+
+        // 先停止定时器，防止回调在资源释放期间重入。
+        _healthCheckTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        _healthCheckTimer?.Dispose();
+        _deviceSemaphore.Dispose();
+
+        _cache?.Dispose();
+        _registeredDevices.Clear();
+        _deviceAllocations.Clear();
+
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// 异步释放。停止健康检查定时器，以 5 秒为上限等待所有设备断开，
+    /// 随后清理注册表/分配表并释放托管资源。
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+
+        try
+        {
+            // 先停止健康检查定时器，防止回调在卸载过程中重入。
+            _healthCheckTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+
+            // 有限等待设备断开，超时则按 best-effort 处理。
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try
+            {
+                await DisconnectAllDevicesAsync(cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // 等待超时：尽力断开，剩余设备由设备自身处理。
+                _logger?.Warning("DeviceManager.DisposeAsync: 断开设备超时（5s），按 best-effort 处理");
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error($"DeviceManager.DisposeAsync: 断开设备异常: {ex.Message}");
+            }
+        }
+        finally
         {
             _healthCheckTimer?.Dispose();
             _deviceSemaphore.Dispose();
-            
-            // 断开所有设备连接
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await DisconnectAllDevicesAsync(CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    _logger?.Error($"释放设备连接失败: {ex.Message}");
-                }
-            });
-            
+            _cache?.Dispose();
             _registeredDevices.Clear();
             _deviceAllocations.Clear();
-            
-            _disposed = true;
+
+            GC.SuppressFinalize(this);
         }
     }
 }

@@ -64,8 +64,6 @@ foreach ($manifestFile in $manifestFiles) {
     $destinationDir = Join-Path (Join-Path $outputPath "plugins") $relativePluginDir
     New-Item -Path $destinationDir -ItemType Directory -Force | Out-Null
 
-    Copy-Item -Path $manifestFile.FullName -Destination (Join-Path $destinationDir "plugin.manifest.json") -Force
-
     $assemblySourceFile = $null
     foreach ($pluginProjectDir in $pluginProjectDirs) {
         $candidateRoot = Join-Path $pluginProjectDir.FullName ("bin\" + $Configuration)
@@ -89,13 +87,47 @@ foreach ($manifestFile in $manifestFiles) {
     }
 
     $assemblyOutputDir = Split-Path -Path $assemblySourceFile.FullName -Parent
-    $filesToCopy = Get-ChildItem -Path $assemblyOutputDir -File
+    $entryAssemblyName = $assemblySourceFile.Name
+
+    # 仅复制插件自己的程序集 + 插件私有依赖（不以 UTF./System./Microsoft. 开头）。
+    # 共享 UTF.*.dll 由宿主统一提供，不打包进插件目录，避免版本冲突。
+    $pluginProjectName = $entryAssemblyName -replace '\.dll$', ''
+    $sharedPrefixes = @('UTF.', 'System.', 'Microsoft.')
+
+    $filesToCopy = Get-ChildItem -Path $assemblyOutputDir -File | Where-Object {
+        $name = $_.Name
+
+        # 清单单独复制（已复制），跳过
+        if ($name -ieq 'plugin.manifest.json') { return $false }
+
+        # 插件主程序集始终复制
+        if ($name -ieq $entryAssemblyName) { return $true }
+
+        # 其余 .dll/.exe：跳过共享框架/UTF 共享程序集，仅保留插件私有依赖
+        $ext = $_.Extension
+        if ($ext -ieq '.dll' -or $ext -ieq '.exe') {
+            foreach ($prefix in $sharedPrefixes) {
+                if ($name.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    return $false
+                }
+            }
+            return $true
+        }
+
+        # 非程序集文件（.json deps/.pdb 等）按原行为复制，但 .deps.json 仅在属于本插件时保留
+        return $true
+    }
 
     foreach ($file in $filesToCopy) {
         Copy-Item -Path $file.FullName -Destination (Join-Path $destinationDir $file.Name) -Force
     }
 
-    Write-Host "[PluginPack] Packed plugin '$($manifest.pluginId)' from '$assemblyOutputDir' to '$destinationDir'"
+    $entryAssemblyPath = Join-Path $destinationDir $entryAssemblyName
+    $assemblyHash = (Get-FileHash -Path $entryAssemblyPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $manifest | Add-Member -NotePropertyName "sha256" -NotePropertyValue $assemblyHash -Force
+    $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path (Join-Path $destinationDir "plugin.manifest.json") -Encoding UTF8
+
+    Write-Host "[PluginPack] Packed plugin '$($manifest.pluginId)' from '$assemblyOutputDir' to '$destinationDir' (private deps only)"
 }
 
 Write-Host "[PluginPack] Done."

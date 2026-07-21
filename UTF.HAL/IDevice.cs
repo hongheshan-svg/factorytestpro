@@ -163,6 +163,7 @@ public enum DeviceConnectionStatus
 /// <summary>
 /// 设备基础接口
 /// </summary>
+[Obsolete("Device abstraction is superseded by the plugin-based driver stack (UTF.Plugins.Drivers). Will be removed in a future version.")]
 public interface IDevice : IDisposable
 {
     /// <summary>设备信息</summary>

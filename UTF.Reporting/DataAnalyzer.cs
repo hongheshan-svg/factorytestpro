@@ -12,6 +12,15 @@ namespace UTF.Reporting;
 /// </summary>
 public sealed class DataAnalyzer : IDataAnalyzer
 {
+    /// <summary>质量基准 - 行业平均通过率（百分比）。TODO: 改为通过 DI 注入的配置驱动值。</summary>
+    private const double IndustryAveragePassRate = 85.0;
+
+    /// <summary>质量基准 - 标杆水平通过率（百分比）。TODO: 改为通过 DI 注入的配置驱动值。</summary>
+    private const double BestInClassPassRate = 95.0;
+
+    /// <summary>设备利用率默认观测窗口（24 小时）。可在调用 CalculateEquipmentUtilization 时覆盖。</summary>
+    private static readonly TimeSpan DefaultObservationWindow = TimeSpan.FromHours(24);
+
     private readonly UTF.Logging.ILogger? _logger;
 
     public DataAnalyzer(UTF.Logging.ILogger? logger = null)
@@ -24,9 +33,9 @@ public sealed class DataAnalyzer : IDataAnalyzer
         try
         {
             _logger?.Info($"计算数据统计信息: {dataSet.Name}");
-            
-            await Task.Delay(200, cancellationToken); // 模拟统计计算过程
-            
+
+            cancellationToken.ThrowIfCancellationRequested();
+
             var totalRecords = dataSet.Rows.Count;
             var passedTests = 0;
             var failedTests = 0;
@@ -169,21 +178,22 @@ public sealed class DataAnalyzer : IDataAnalyzer
         return (double)firstPassCount / firstAttempts.Count * 100;
     }
 
-    private double CalculateEquipmentUtilization(ReportDataSet dataSet)
+    private double CalculateEquipmentUtilization(ReportDataSet dataSet, TimeSpan? observationWindow = null)
     {
-        // 模拟设备利用率计算
-        var totalTime = TimeSpan.FromHours(24); // 假设24小时工作时间
+        // 设备利用率 = 已用时间 / 观测窗口总时间。默认观测窗口为 24 小时以保持向后兼容；
+        // 调用方可通过 observationWindow 传入实际生产班次时长（如 8 小时单班、16 小时双班）。
+        var totalTime = observationWindow ?? DefaultObservationWindow;
         var usedTime = dataSet.Rows
             .Where(r => r.TryGetValue("ExecutionTime", out var execTime))
-            .Sum(r => 
+            .Sum(r =>
             {
                 var time = r["ExecutionTime"];
                 if (time is TimeSpan ts) return ts.TotalMinutes;
                 if (TimeSpan.TryParse(time?.ToString(), out var parsed)) return parsed.TotalMinutes;
                 return 0;
             });
-        
-        return Math.Min(100, usedTime / totalTime.TotalMinutes * 100);
+
+        return Math.Min(100, totalTime > TimeSpan.Zero ? usedTime / totalTime.TotalMinutes * 100 : 0);
     }
 
     private double CalculateDefectDensity(ReportDataSet dataSet)
@@ -249,9 +259,9 @@ public sealed class DataAnalyzer : IDataAnalyzer
         try
         {
             _logger?.Info($"分析趋势数据: {dataSet.Name}");
-            
-            await Task.Delay(300, cancellationToken); // 模拟趋势分析过程
-            
+
+            cancellationToken.ThrowIfCancellationRequested();
+
             var trendAnalysis = new Dictionary<string, object>();
             var timeSeriesData = new Dictionary<DateTime, Dictionary<string, double>>();
             
@@ -435,9 +445,9 @@ public sealed class DataAnalyzer : IDataAnalyzer
         try
         {
             _logger?.Info($"分析故障数据: {dataSet.Name}");
-            
-            await Task.Delay(250, cancellationToken); // 模拟故障分析过程
-            
+
+            cancellationToken.ThrowIfCancellationRequested();
+
             var failureAnalysis = new Dictionary<string, object>();
             var failures = dataSet.Rows.Where(r => 
                 r.TryGetValue("TestResult", out var result) && 
@@ -563,12 +573,58 @@ public sealed class DataAnalyzer : IDataAnalyzer
 
     private TimeSpan CalculateMTTR(List<Dictionary<string, object>> failures)
     {
-        // Mean Time To Repair (模拟修复时间)
-        var repairTimes = failures.Select(f => TimeSpan.FromMinutes(new Random().Next(15, 120))).ToList();
-        
-        return repairTimes.Any() 
+        // Mean Time To Repair：仅在数据中存在真实修复时间字段时计算，否则返回 Zero（不伪造）。
+        // 支持的字段名：RepairTime / RepairDuration / Downtime（值为秒数或 TimeSpan）。
+        var repairTimes = new List<TimeSpan>();
+        foreach (var f in failures)
+        {
+            if (TryGetRepairTime(f, out var repair))
+            {
+                repairTimes.Add(repair);
+            }
+        }
+
+        return repairTimes.Count > 0
             ? TimeSpan.FromTicks((long)repairTimes.Average(t => t.Ticks))
             : TimeSpan.Zero;
+    }
+
+    private static bool TryGetRepairTime(Dictionary<string, object> row, out TimeSpan repair)
+    {
+        repair = TimeSpan.Zero;
+        var candidateKeys = new[] { "RepairTime", "RepairDuration", "Downtime", "RepairTimeSeconds" };
+        foreach (var key in candidateKeys)
+        {
+            if (!row.TryGetValue(key, out var value) || value is null) continue;
+
+            switch (value)
+            {
+                case TimeSpan ts:
+                    repair = ts;
+                    return true;
+                case double d:
+                    repair = TimeSpan.FromSeconds(d);
+                    return true;
+                case int i:
+                    repair = TimeSpan.FromSeconds(i);
+                    return true;
+                case long l:
+                    repair = TimeSpan.FromSeconds(l);
+                    return true;
+                case decimal dec:
+                    repair = TimeSpan.FromSeconds((double)dec);
+                    return true;
+                default:
+                    if (double.TryParse(value.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+                    {
+                        repair = TimeSpan.FromSeconds(parsed);
+                        return true;
+                    }
+                    break;
+            }
+        }
+
+        return false;
     }
 
     private List<string> GenerateFailureRecommendations(Dictionary<string, int> categories, List<KeyValuePair<string, int>> topReasons)
@@ -599,9 +655,9 @@ public sealed class DataAnalyzer : IDataAnalyzer
         try
         {
             _logger?.Info($"分析性能数据: {dataSet.Name}");
-            
-            await Task.Delay(200, cancellationToken); // 模拟性能分析过程
-            
+
+            cancellationToken.ThrowIfCancellationRequested();
+
             var performanceAnalysis = new Dictionary<string, object>();
             var executionTimes = new List<double>();
             var throughputData = new Dictionary<DateTime, int>();
@@ -825,9 +881,9 @@ public sealed class DataAnalyzer : IDataAnalyzer
         try
         {
             _logger?.Info($"分析质量数据: {dataSet.Name}");
-            
-            await Task.Delay(180, cancellationToken); // 模拟质量分析过程
-            
+
+            cancellationToken.ThrowIfCancellationRequested();
+
             var qualityAnalysis = new Dictionary<string, object>();
             var totalTests = dataSet.Rows.Count;
             var passedTests = dataSet.Rows.Count(r => 
@@ -858,10 +914,10 @@ public sealed class DataAnalyzer : IDataAnalyzer
                 { "ImprovementRecommendations", improvements },
                 { "BenchmarkComparison", new Dictionary<string, object>
                     {
-                        { "IndustryAverage", 85.0 },
-                        { "BestInClass", 95.0 },
+                        { "IndustryAverage", IndustryAveragePassRate },
+                        { "BestInClass", BestInClassPassRate },
                         { "YourPerformance", passRate },
-                        { "Gap", Math.Max(0, 95.0 - passRate) }
+                        { "Gap", Math.Max(0, BestInClassPassRate - passRate) }
                     }
                 }
             };
@@ -988,9 +1044,9 @@ public sealed class DataAnalyzer : IDataAnalyzer
         try
         {
             _logger?.Info($"检测异常值: 字段 {valueField}, 阈值 {threshold}");
-            
-            await Task.Delay(150, cancellationToken); // 模拟异常检测过程
-            
+
+            cancellationToken.ThrowIfCancellationRequested();
+
             var anomalies = new List<Dictionary<string, object>>();
             var values = new List<double>();
             
@@ -1060,9 +1116,9 @@ public sealed class DataAnalyzer : IDataAnalyzer
         try
         {
             _logger?.Info($"分析相关性: {fields.Count} 个字段");
-            
-            await Task.Delay(100, cancellationToken); // 模拟相关性分析过程
-            
+
+            cancellationToken.ThrowIfCancellationRequested();
+
             var correlations = new Dictionary<string, double>();
             var fieldData = new Dictionary<string, List<double>>();
             

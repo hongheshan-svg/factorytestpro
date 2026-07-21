@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using UTF.Plugin.Abstractions;
 
 namespace UTF.Plugins.Example;
@@ -43,6 +42,7 @@ public sealed class CmdStepExecutorPlugin : IStepExecutorPlugin
     public async Task<StepExecutionResult> ExecuteAsync(StepExecutionRequest request, CancellationToken cancellationToken = default)
     {
         var startedAt = DateTime.UtcNow;
+        Process? process = null;
         try
         {
             if (string.IsNullOrWhiteSpace(request.Command))
@@ -59,18 +59,9 @@ public sealed class CmdStepExecutorPlugin : IStepExecutorPlugin
                 };
             }
 
-            var (fileName, arguments) = BuildProcessStartInfo(request.Channel, request.Command);
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = arguments,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            var startInfo = BuildProcessStartInfo(request.Channel, request.Command);
 
-            using var process = new Process { StartInfo = startInfo };
+            process = new Process { StartInfo = startInfo };
             if (!process.Start())
             {
                 return new StepExecutionResult
@@ -85,12 +76,12 @@ public sealed class CmdStepExecutorPlugin : IStepExecutorPlugin
                 };
             }
 
-            var outputTask = process.StandardOutput.ReadToEndAsync();
-            var errorTask = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync(cancellationToken);
+            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
 
-            var stdout = await outputTask;
-            var stderr = await errorTask;
+            var stdout = await outputTask.ConfigureAwait(false);
+            var stderr = await errorTask.ConfigureAwait(false);
             var merged = $"{stdout}{Environment.NewLine}{stderr}".Trim();
 
             if (process.ExitCode != 0)
@@ -140,16 +131,8 @@ public sealed class CmdStepExecutorPlugin : IStepExecutorPlugin
         }
         catch (OperationCanceledException)
         {
-            return new StepExecutionResult
-            {
-                Status = StepExecutionStatus.Timeout,
-                StartTimeUtc = startedAt,
-                EndTimeUtc = DateTime.UtcNow,
-                ErrorCode = PluginErrorCodes.ExecuteTimeout,
-                ErrorMessage = "插件命令执行超时。",
-                PluginId = Metadata.PluginId,
-                PluginVersion = Metadata.Version
-            };
+            TryKillProcessTree(process);
+            throw;
         }
         catch (Exception ex)
         {
@@ -164,6 +147,10 @@ public sealed class CmdStepExecutorPlugin : IStepExecutorPlugin
                 PluginVersion = Metadata.Version
             };
         }
+        finally
+        {
+            process?.Dispose();
+        }
     }
 
     public Task ShutdownAsync(CancellationToken cancellationToken = default)
@@ -171,16 +158,38 @@ public sealed class CmdStepExecutorPlugin : IStepExecutorPlugin
         return Task.CompletedTask;
     }
 
-    private static (string FileName, string Arguments) BuildProcessStartInfo(string channel, string command)
+    /// <summary>
+    /// 构建 <see cref="ProcessStartInfo"/>，使用 ArgumentList 逐参数添加，避免手动转义导致的命令注入。
+    /// 始终设置 UseShellExecute=false 与重定向输出。
+    /// </summary>
+    private static ProcessStartInfo BuildProcessStartInfo(string channel, string command)
     {
         var normalizedChannel = (channel ?? string.Empty).Trim().ToLowerInvariant();
+        var startInfo = new ProcessStartInfo
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
         if (normalizedChannel is "powershell" or "ps")
         {
-            var escaped = command.Replace("\"", "\\\"");
-            return ("powershell.exe", $"-NoProfile -NonInteractive -Command \"{escaped}\"");
+            startInfo.FileName = "powershell.exe";
+            // 逐参数添加，框架负责正确转义；命令原样作为单个参数，不做手动转义。
+            startInfo.ArgumentList.Add("-NoProfile");
+            startInfo.ArgumentList.Add("-NonInteractive");
+            startInfo.ArgumentList.Add("-Command");
+            startInfo.ArgumentList.Add(command);
+        }
+        else
+        {
+            startInfo.FileName = "cmd.exe";
+            startInfo.ArgumentList.Add("/c");
+            startInfo.ArgumentList.Add(command);
         }
 
-        return ("cmd.exe", $"/c {command}");
+        return startInfo;
     }
 
     private static string? TryGetExpectedExpression(IReadOnlyDictionary<string, object?> parameters)
@@ -200,53 +209,22 @@ public sealed class CmdStepExecutorPlugin : IStepExecutorPlugin
 
     private static bool IsExpectedResult(string response, string expectedExpression, out string reason)
     {
-        reason = string.Empty;
-        var text = response ?? string.Empty;
-        var expression = expectedExpression.Trim();
+        return ExpectedResultMatcher.Match(expectedExpression, response, out reason);
+    }
 
-        if (string.IsNullOrEmpty(expression))
+    private static void TryKillProcessTree(Process? process)
+    {
+        try
         {
-            return true;
-        }
-
-        if (expression.StartsWith("contains:", StringComparison.OrdinalIgnoreCase))
-        {
-            var expected = expression[9..];
-            var ok = text.Contains(expected, StringComparison.OrdinalIgnoreCase);
-            if (!ok)
+            if (process is { HasExited: false })
             {
-                reason = $"响应不包含预期内容: {expected}";
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(2000);
             }
-            return ok;
         }
-
-        if (expression.StartsWith("equals:", StringComparison.OrdinalIgnoreCase))
+        catch
         {
-            var expected = expression[7..];
-            var ok = string.Equals(text.Trim(), expected.Trim(), StringComparison.OrdinalIgnoreCase);
-            if (!ok)
-            {
-                reason = $"响应与预期不一致，预期: {expected}";
-            }
-            return ok;
+            // Preserve the original cancellation signal.
         }
-
-        if (expression.StartsWith("regex:", StringComparison.OrdinalIgnoreCase))
-        {
-            var pattern = expression[6..];
-            var ok = Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            if (!ok)
-            {
-                reason = $"响应不匹配正则: {pattern}";
-            }
-            return ok;
-        }
-
-        var fallback = text.Contains(expression, StringComparison.OrdinalIgnoreCase);
-        if (!fallback)
-        {
-            reason = $"响应不包含预期文本: {expression}";
-        }
-        return fallback;
     }
 }

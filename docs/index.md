@@ -34,7 +34,7 @@
 
 - [迁移指南](migration-guide.md)
 - [架构优化报告](architecture-optimization-report.md)
-- [完成度检查](completeness-check.md)
+- [完成度检查（历史快照，pre-2026-07）](completeness-check.md)
 - [实现完成说明](implementation-complete.md)
 
 ### 协作与开源

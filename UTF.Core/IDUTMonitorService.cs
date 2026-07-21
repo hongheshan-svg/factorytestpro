@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using UTF.Plugin.Abstractions;
 
 namespace UTF.Core;
 
@@ -15,5 +16,7 @@ public interface IDUTMonitorService
     Task StopAllTestsAsync();
     event Action? StatisticsUpdateRequested;
     event Action? AllTestsCompleted;
-    IReadOnlyList<object> GetLoadedPlugins();
+
+    /// <summary>获取已加载插件的元数据列表</summary>
+    IReadOnlyList<PluginMetadata> GetLoadedPlugins();
 }

@@ -11,6 +11,15 @@ public class StepExecutorPluginHostTests : IDisposable
 {
     private readonly List<string> _tempDirectories = new();
 
+    public StepExecutorPluginHostTests()
+    {
+        // The plugin host now requires SHA-256 in every manifest (PLG002) for production safety.
+        // Test fixtures load unsigned plugins (CopyTestPluginPackage writes sha256=null,
+        // and CopyRealCmdPluginPackage reuses a packaged manifest without sha256).
+        // The host honors UTFF_ALLOW_UNSIGNED_PLUGINS to admit unsigned plugins in test/dev only.
+        Environment.SetEnvironmentVariable("UTFF_ALLOW_UNSIGNED_PLUGINS", "1");
+    }
+
     public void Dispose()
     {
         GC.Collect();
@@ -26,9 +35,11 @@ public class StepExecutorPluginHostTests : IDisposable
 
             Directory.Delete(directory, recursive: true);
         }
+
+        Environment.SetEnvironmentVariable("UTFF_ALLOW_UNSIGNED_PLUGINS", null);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task InitializeAsync_NonExistentDirectory_ReturnsEmptyReport()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -39,7 +50,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Equal(0, report.FailedCount);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task InitializeAsync_EmptyDirectory_ReturnsEmptyReport()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateTempDirectory(_tempDirectories));
@@ -49,7 +60,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Equal(0, report.FailedCount);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task InitializeAsync_CalledTwice_ReturnsExistingCount()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -60,7 +71,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Equal(first.LoadedCount, second.LoadedCount);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task UnloadPluginAsync_NonExistentPlugin_ReturnsFalse()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -71,7 +82,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task UnloadPluginAsync_NullPluginId_ThrowsArgumentNullException()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -79,7 +90,7 @@ public class StepExecutorPluginHostTests : IDisposable
         await Assert.ThrowsAsync<ArgumentNullException>(() => host.UnloadPluginAsync(null!));
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ReloadPluginAsync_NonExistentPlugin_ReturnsFailure()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -93,7 +104,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Equal(PluginErrorCodes.PluginNotFound, report.Issues[0].ErrorCode);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ReloadPluginAsync_NullPluginId_ThrowsArgumentNullException()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -101,7 +112,7 @@ public class StepExecutorPluginHostTests : IDisposable
         await Assert.ThrowsAsync<ArgumentNullException>(() => host.ReloadPluginAsync(null!));
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task UpgradePluginAsync_NonExistentManifest_ReturnsFailure()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -114,7 +125,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Equal(PluginErrorCodes.ManifestInvalid, report.Issues[0].ErrorCode);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task UpgradePluginAsync_MismatchedPluginId_ReturnsUpgradeFailure()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -139,7 +150,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Equal(PluginErrorCodes.UpgradeFailed, report.Issues[0].ErrorCode);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task UpgradePluginAsync_NullPluginId_ThrowsArgumentNullException()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -147,7 +158,7 @@ public class StepExecutorPluginHostTests : IDisposable
         await Assert.ThrowsAsync<ArgumentNullException>(() => host.UpgradePluginAsync(null!, "manifest.json"));
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task UpgradePluginAsync_NullManifestPath_ThrowsArgumentNullException()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -155,7 +166,7 @@ public class StepExecutorPluginHostTests : IDisposable
         await Assert.ThrowsAsync<ArgumentNullException>(() => host.UpgradePluginAsync("test.plugin", null!));
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ExecuteAsync_NoMatchingPlugin_ReturnsNoMatchingPluginError()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -173,7 +184,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Equal(PluginErrorCodes.NoMatchingPlugin, result.ErrorCode);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ExecuteAsync_TwoRealManifestPluginsWithSamePriority_ReturnsConflictError()
     {
         var pluginRoot = StepExecutorPluginHostTestAssets.CreateTempDirectory(_tempDirectories);
@@ -199,7 +210,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Equal(PluginErrorCodes.MultipleMatchingPlugins, result.ErrorCode);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ExecuteAsync_TwoManifestPluginsWithDifferentPriority_SelectsLowerPriorityValuePlugin()
     {
         var pluginRoot = StepExecutorPluginHostTestAssets.CreateTempDirectory(_tempDirectories);
@@ -234,7 +245,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Equal("selected-low-priority", result.NormalizedOutput);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task InitializeAsync_InvalidJsonManifest_ReturnsManifestInvalidIssue()
     {
         var pluginRoot = StepExecutorPluginHostTestAssets.CreateTempDirectory(_tempDirectories);
@@ -249,7 +260,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Equal(PluginErrorCodes.ManifestInvalid, report.Issues[0].ErrorCode);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task InitializeAsync_IncompatibleApiVersion_ReturnsApiVersionIncompatibleIssue()
     {
         var pluginRoot = StepExecutorPluginHostTestAssets.CreateTempDirectory(_tempDirectories);
@@ -269,7 +280,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Equal(PluginErrorCodes.ApiVersionIncompatible, report.Issues[0].ErrorCode);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task InitializeAsync_InvalidSha256_ReturnsIntegrityCheckFailedIssue()
     {
         var pluginRoot = StepExecutorPluginHostTestAssets.CreateTempDirectory(_tempDirectories);
@@ -289,7 +300,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Equal(PluginErrorCodes.IntegrityCheckFailed, report.Issues[0].ErrorCode);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void HealthCheck_NoPlugins_ReturnsEmptyReport()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -301,13 +312,13 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Empty(health.Entries);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void Constructor_NullPluginRoot_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new StepExecutorPluginHost(null!));
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void LoadedPlugins_BeforeInitialize_ReturnsEmptyList()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());
@@ -315,7 +326,7 @@ public class StepExecutorPluginHostTests : IDisposable
         Assert.Empty(host.LoadedPlugins);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void Dispose_NoPlugins_DoesNotThrow()
     {
         var host = new StepExecutorPluginHost(StepExecutorPluginHostTestAssets.CreateNonExistentPath());

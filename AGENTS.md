@@ -2,7 +2,7 @@
 
 ## Project Structure
 - `UniversalTestFramework.sln` is a .NET 10 solution for a Windows-only WPF test platform.
-- Main projects: `UTF.HAL`, `UTF.Logging`, `UTF.Configuration`, `UTF.Core`, `UTF.Plugin.Abstractions`, `UTF.Plugin.Host`, `UTF.Business`, `UTF.Reporting`, `UTF.Vision`, `UTF.UI`, `UTF.Plugins.Drivers`, `UTF.Plugins.Example`, `tests/UTF.Core.Tests`.
+- Main projects: `UTF.HAL`, `UTF.Logging`, `UTF.Configuration`, `UTF.Core`, `UTF.Plugin.Abstractions`, `UTF.Plugin.Host`, `UTF.Business`, `UTF.Reporting`, `UTF.Vision`, `UTF.UI`, `UTF.Plugins.Drivers`, `UTF.Plugins.Example`, `tests/UTF.Core.Tests`, `tests/UTF.Business.Tests`, `tests/UTF.Configuration.Tests`, `tests/UTF.Plugin.Host.Tests`, `tests/UTF.Reporting.Tests`, `tests/UTF.UI.Tests`.
 - `UTF.UI` is the desktop entry point (`net10.0-windows`). Startup and DI composition live in `UTF.UI/App.xaml.cs`.
 - Runtime configuration is centered on `config/unified-config.json`. Example and user data live under `Data/` and `UTF.UI/Data/`.
 - Do not edit generated outputs in `bin/`, `obj/`, or runtime logs under `UTF.UI/bin/**/logs/` unless the task explicitly targets build artifacts.
@@ -16,7 +16,8 @@
   - `UTF.UI/App.xaml.cs` for startup, DI, and crash handling
   - `UTF.Core/ConfigDrivenTestEngine.cs` for step execution behavior
   - `UTF.Core/ConfigDrivenTestOrchestrator.cs` for session orchestration and concurrency
-  - `UTF.Plugin.Host/StepExecutorPluginHost.cs` for plugin loading and dispatch
+  - `UTF.Plugin.Host/StepExecutorPluginHost.cs` for plugin loading and dispatch (SHA-256 mandatory, path-traversal guarded)
+  - `UTF.Plugin.Abstractions/ExpectedResultMatcher.cs` for the single source of truth on `contains:`/`equals:`/`regex:`/`notcontains:` result validation
   - `tests/UTF.Core.Tests/ConfigDrivenTestEngineTests.cs` for xUnit test style
 
 ## Build And Test
@@ -28,8 +29,9 @@
   - `dotnet run --project UTF.UI/UTF.UI.csproj -c Debug`
   - In VS Code, prefer the existing task `Run UTF.UI` when you need the app running.
 - Tests:
-  - `dotnet test`
+  - `dotnet test UniversalTestFramework.sln`
   - `dotnet test tests/UTF.Core.Tests/UTF.Core.Tests.csproj --logger "console;verbosity=detailed"`
+- CI: `.github/workflows/ci.yml` runs restore/build/test on `windows-latest` for pushes and PRs to `main`. Plugin loading tests set the `UTFF_ALLOW_UNSIGNED_PLUGINS=1` env var to admit test fixtures without `sha256`; production never sets this.
 - Validation scripts:
   - `./verify-migration.sh`
   - `.\verify-migration.ps1`
@@ -43,7 +45,8 @@
 - Tests use xUnit and should follow `Method_Scenario_ExpectedResult` naming with clear Arrange/Act/Assert structure.
 - This codebase is Windows-specific. Avoid proposing cross-platform runtime changes unless the task explicitly asks for them.
 - Configuration-driven steps support fields such as `TargetDeviceId`, `RetryCount`, `StoreResultAs`, and `ConditionExpression`, and command or expected templates using `{{key}}` or `${key}`. Preserve these behaviors when changing execution logic.
-- Result validation is prefix-driven (`contains:`, `equals:`, `regex:`, `notcontains:`). Keep new validation behavior compatible with the existing config format.
+- Result validation is prefix-driven (`contains:`, `equals:`, `regex:`, `notcontains:`). The canonical implementation is `UTF.Plugin.Abstractions.ExpectedResultMatcher.Match(expected, actual)` (re-exported as `UTF.Core.Validation.ExpectedResultMatcher`). New validation code MUST call this matcher rather than re-parsing the prefixes inline. Keep new validation behavior compatible with the existing config format.
+- Plugin manifests: `sha256` is MANDATORY in production (the host refuses to load unsigned plugins). `EntryAssembly` must be a path relative to the manifest directory and must not escape it (no `..`). Local dev/tests may set `UTFF_ALLOW_UNSIGNED_PLUGINS=1` to admit fixtures without `sha256`.
 
 ## Reference Docs
 - See `config/README.md` for configuration structure and step field details.

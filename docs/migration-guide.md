@@ -1,5 +1,7 @@
 # 快速迁移指南
 
+> **Status: updated 2026-07.** 本指南已对齐 2026-07 重构后的代码：原 `TestOrchestrator` 与 `ITestValidator` 已删除，当前并发入口为 `ConfigDrivenTestOrchestrator` + `ConfigDrivenTestEngine.ExecuteStepAsync`。
+
 ## 如何使用新架构
 
 ### 1. 更新 App.xaml.cs
@@ -21,21 +23,26 @@ if (!ValidateResult(result, expected)) {
 ```csharp
 public class DUTMonitorManager
 {
-    private readonly TestOrchestrator _orchestrator;
+    private readonly ConfigDrivenTestOrchestrator _orchestrator;
+    private readonly ConfigDrivenTestEngine _engine;
 
-    public DUTMonitorManager(..., TestOrchestrator orchestrator)
+    public DUTMonitorManager(..., ConfigDrivenTestOrchestrator orchestrator, ConfigDrivenTestEngine engine)
     {
         _orchestrator = orchestrator;
+        _engine = engine;
     }
 
-    public async Task ExecuteTestAsync(TestStep step, string dutId)
+    public async Task ExecuteTestAsync(CoreStepExecutionRequest step, string dutId, CancellationToken ct)
     {
-        var result = await _orchestrator.ExecuteStepWithRetryAsync(step, dutId);
+        // 步骤执行（包含重试、条件跳过、上下文变量、MockOutput 等内置行为）
+        var result = await _engine.ExecuteStepAsync(step, ct);
         // 只负责UI更新
         UpdateUI(result);
     }
 }
 ```
+
+`ConfigDrivenTestEngine` 同时实现 `IStepExecutionService`，因此需要解耦的调用方也可注入 `IStepExecutionService` 接口而非具体实现。`ConfigDrivenTestOrchestrator` 负责并发会话编排与共享会话状态，不应在 VM 层直接调用 `ExecuteStepWithRetryAsync`（该方法已合并入引擎内部）。
 
 ### 3. 自定义重试策略
 
@@ -51,30 +58,21 @@ public class FixedDelayRetryPolicy : IRetryPolicy
 }
 
 // 注册
-services.AddTransient<IRetryPolicy, FixedDelayRetryPolicy>();
+services.AddSingleton<IRetryPolicy, FixedDelayRetryPolicy>();
 ```
 
 ### 4. 自定义验证规则
 
+结果验证现在通过 `UTF.Plugin.Abstractions.ExpectedResultMatcher.Match(expected, actual)` 进行（在 `UTF.Core` 中作为 `UTF.Core.Validation.ExpectedResultMatcher` 重新导出）。新增自定义验证应扩展现有的前缀语义（`contains:` / `equals:` / `regex:` / `notcontains:`），或通过配置侧的 `ValidationRules`（`MustContainAll` / `MustNotContainAny` / `Regex` / `NumericRange`）声明，而不是再实现一个独立的 `ITestValidator`。
+
 ```csharp
-public class RangeValidator : ITestValidator
+// 在配置中声明扩展校验规则
 {
-    public ValidationResult Validate(string actual, string expected, string? rule)
-    {
-        if (rule == "range")
-        {
-            // expected格式: "range:10-20"
-            var parts = expected.Split(':')[1].Split('-');
-            var value = double.Parse(actual);
-            var min = double.Parse(parts[0]);
-            var max = double.Parse(parts[1]);
-            return new ValidationResult(
-                value >= min && value <= max,
-                $"值 {value} 不在范围 [{min}, {max}]"
-            );
-        }
-        return new ValidationResult(true);
-    }
+  "ValidationRules": {
+    "MustContainAll": ["PASS", "VOLTAGE"],
+    "MustNotContainAny": ["ERROR", "FAIL"],
+    "NumericRange": { "Min": 3.3, "Max": 4.2 }
+  }
 }
 ```
 

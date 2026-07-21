@@ -1,210 +1,50 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using UTF.UI.Models;
 using UTF.UI.Services;
+using UTF.UI.ViewModels;
 
 namespace UTF.UI
 {
     public partial class ConfigurationCenterWindow : Window
     {
-        private readonly ConfigurationManager _configManager;
-        private UnifiedConfiguration _config = new();
+        private readonly ConfigurationCenterViewModel _viewModel;
 
-        public ConfigurationCenterWindow(ConfigurationManager configManager)
+        public ConfigurationCenterWindow(ConfigurationCenterViewModel viewModel)
         {
             InitializeComponent();
-            _configManager = configManager;
+            _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+            DataContext = _viewModel;
             Loaded += Window_Loaded;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        }
+
+        private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ConfigurationCenterViewModel.ValidationStatus) ||
+                e.PropertyName == nameof(ConfigurationCenterViewModel.ValidationStatusColor))
+            {
+                SyncValidationDisplay();
+            }
+            // SelectedStep 变化已由 XAML 双向绑定驱动详情面板各字段 + NullToVisibilityConverter
+            // 自动控制面板可见性，不再需要 ShowStepDetail 介入。
         }
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
             try
             {
-                _config = await _configManager.GetUnifiedConfigurationAsync();
-                PopulateAllFields();
+                // MVVM: VM 在 LoadConfigAsync 中同步填充所有集合与选中值（串口/主机/步骤/枚举），
+                // XAML 双向绑定自动反映到控件，无需代码后置手动 PopulateManualFields。
+                await _viewModel.LoadConfigAsync();
+                SyncValidationDisplay();
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"加载配置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        private void PopulateAllFields()
-        {
-            // 系统设置
-            var sys = _config.SystemSettings;
-            SetComboByContent(LogLevelCombo, sys.LogLevel);
-            ResultsPathText.Text = sys.ResultsPath;
-            AutoSaveCheck.IsChecked = sys.AutoSaveResults;
-            SetComboByContent(LanguageCombo, sys.DefaultLanguage, partialMatch: true);
-            SetComboByContent(ThemeCombo, sys.Theme);
-
-            // DUT配置 - 产品信息
-            var product = _config.DUTConfiguration?.ProductInfo;
-            if (product != null)
-            {
-                ProductNameText.Text = product.Name;
-                ProductModelText.Text = product.Model;
-                ProductCategoryText.Text = product.Category;
-            }
-
-            // DUT配置 - 全局参数
-            var global = _config.DUTConfiguration?.GlobalSettings;
-            if (global != null)
-            {
-                MaxConcurrentText.Text = global.DefaultMaxConcurrent?.ToString() ?? "16";
-                TestTimeoutText.Text = global.TestTimeout?.ToString() ?? "300";
-                RetryCountText.Text = global.RetryCount?.ToString() ?? "3";
-            }
-
-            // DUT配置 - 串口列表
-            var endpoints = _config.DUTConfiguration?.CommunicationEndpoints;
-            SerialPortsList.Items.Clear();
-            if (endpoints?.SerialPorts != null)
-                foreach (var port in endpoints.SerialPorts)
-                    SerialPortsList.Items.Add(port);
-
-            // DUT配置 - 网络主机列表
-            NetworkHostsList.Items.Clear();
-            if (endpoints?.NetworkHosts != null)
-                foreach (var host in endpoints.NetworkHosts)
-                    NetworkHostsList.Items.Add(host);
-
-            // DUT配置 - 命名模板
-            var naming = _config.DUTConfiguration?.NamingConfig;
-            NamingTemplateText.Text = naming?.Template ?? "{TypeName}测试工位{Index}";
-            NamingIdTemplateText.Text = naming?.IdTemplate ?? "DUT-{Index}";
-            UpdateNamingPreview();
-
-            // 测试模式信息
-            var testMode = _config.TestProjectConfiguration?.TestMode;
-            if (testMode != null)
-            {
-                TestModeNameText.Text = testMode.Name;
-                MaxRetriesText.Text = testMode.MaxRetries?.ToString() ?? "0";
-                EnableParallelCheck.IsChecked = testMode.EnableParallel ?? false;
-            }
-
-            // 测试步骤
-            if (_config.TestProjectConfiguration == null)
-                _config.TestProjectConfiguration = new TestProjectConfiguration();
-            if (_config.TestProjectConfiguration.TestProject == null)
-                _config.TestProjectConfiguration.TestProject = new TestProject();
-
-            var steps = _config.TestProjectConfiguration.TestProject.Steps;
-            if (steps != null)
-                TestStepsGrid.ItemsSource = new System.Collections.ObjectModel.ObservableCollection<TestStepConfig>(steps);
-
-            StepDetailPanel.Visibility = Visibility.Collapsed;
-        }
-
-        private void CollectAllFields()
-        {
-            // 系统设置
-            _config.SystemSettings.LogLevel = (LogLevelCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Info";
-            _config.SystemSettings.ResultsPath = ResultsPathText.Text;
-            _config.SystemSettings.AutoSaveResults = AutoSaveCheck.IsChecked == true;
-
-            var langItem = (LanguageCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "";
-            if (langItem.Contains("zh-CN")) _config.SystemSettings.DefaultLanguage = "zh-CN";
-            else if (langItem.Contains("en-US")) _config.SystemSettings.DefaultLanguage = "en-US";
-            else if (langItem.Contains("ja-JP")) _config.SystemSettings.DefaultLanguage = "ja-JP";
-
-            _config.SystemSettings.Theme = (ThemeCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Light";
-
-            // DUT配置 - 产品信息
-            if (_config.DUTConfiguration == null) _config.DUTConfiguration = new DUTConfiguration();
-            if (_config.DUTConfiguration.ProductInfo == null) _config.DUTConfiguration.ProductInfo = new ProductInfo();
-            _config.DUTConfiguration.ProductInfo.Name = ProductNameText.Text;
-            _config.DUTConfiguration.ProductInfo.Model = ProductModelText.Text;
-            _config.DUTConfiguration.ProductInfo.Category = ProductCategoryText.Text;
-
-            // DUT配置 - 全局参数
-            if (_config.DUTConfiguration.GlobalSettings == null) _config.DUTConfiguration.GlobalSettings = new GlobalSettings();
-            if (int.TryParse(MaxConcurrentText.Text, out int maxC)) _config.DUTConfiguration.GlobalSettings.DefaultMaxConcurrent = maxC;
-            if (int.TryParse(TestTimeoutText.Text, out int timeout)) _config.DUTConfiguration.GlobalSettings.TestTimeout = timeout;
-            if (int.TryParse(RetryCountText.Text, out int retry)) _config.DUTConfiguration.GlobalSettings.RetryCount = retry;
-
-            // DUT配置 - 串口列表
-            if (_config.DUTConfiguration.CommunicationEndpoints == null)
-                _config.DUTConfiguration.CommunicationEndpoints = new CommunicationEndpoints();
-            _config.DUTConfiguration.CommunicationEndpoints.SerialPorts =
-                SerialPortsList.Items.Cast<string>().ToList();
-
-            // DUT配置 - 网络主机列表
-            _config.DUTConfiguration.CommunicationEndpoints.NetworkHosts =
-                NetworkHostsList.Items.Cast<string>().ToList();
-
-            // DUT配置 - 命名模板
-            if (_config.DUTConfiguration.NamingConfig == null) _config.DUTConfiguration.NamingConfig = new NamingConfig();
-            _config.DUTConfiguration.NamingConfig.Template = NamingTemplateText.Text;
-            _config.DUTConfiguration.NamingConfig.IdTemplate = NamingIdTemplateText.Text;
-
-            // 测试步骤
-            if (_config.TestProjectConfiguration == null)
-                _config.TestProjectConfiguration = new TestProjectConfiguration();
-            if (_config.TestProjectConfiguration.TestProject == null)
-                _config.TestProjectConfiguration.TestProject = new TestProject();
-
-            if (TestStepsGrid.ItemsSource is System.Collections.ObjectModel.ObservableCollection<TestStepConfig> steps)
-                _config.TestProjectConfiguration.TestProject.Steps = steps.ToList();
-        }
-
-        // ── 串口管理 ────────────────────────────────────────────────────────────
-
-        private void AddSerialPort_Click(object sender, RoutedEventArgs e)
-        {
-            var port = NewSerialPortText.Text.Trim().ToUpper();
-            if (string.IsNullOrEmpty(port) || !port.StartsWith("COM"))
-            {
-                MessageBox.Show("请输入有效的串口名（如 COM3）", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            if (SerialPortsList.Items.Contains(port))
-            {
-                MessageBox.Show($"{port} 已存在", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-            SerialPortsList.Items.Add(port);
-            NewSerialPortText.Text = "COM";
-        }
-
-        private void DeleteSerialPort_Click(object sender, RoutedEventArgs e)
-        {
-            if (SerialPortsList.SelectedItem != null)
-                SerialPortsList.Items.Remove(SerialPortsList.SelectedItem);
-        }
-
-        // ── 网络主机管理 ─────────────────────────────────────────────────────────
-
-        private void AddNetworkHost_Click(object sender, RoutedEventArgs e)
-        {
-            var host = NewNetworkHostText.Text.Trim();
-            if (string.IsNullOrEmpty(host))
-            {
-                MessageBox.Show("请输入有效的IP地址", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            if (NetworkHostsList.Items.Contains(host))
-            {
-                MessageBox.Show($"{host} 已存在", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-            NetworkHostsList.Items.Add(host);
-            NewNetworkHostText.Text = "192.168.1.";
-        }
-
-        private void DeleteNetworkHost_Click(object sender, RoutedEventArgs e)
-        {
-            if (NetworkHostsList.SelectedItem != null)
-                NetworkHostsList.Items.Remove(NetworkHostsList.SelectedItem);
         }
 
         // ── 命名模板预览 ─────────────────────────────────────────────────────────
@@ -228,7 +68,7 @@ namespace UTF.UI
                 .Replace("{Index}", "1");
             var idName = idTemplate.Replace("{Index}", "1");
 
-            NamingPreviewText.Text = $"{idName} → {displayName}";
+            NamingPreviewText.Text = $"{idName} -> {displayName}";
         }
 
         // ── 保存 / 加载 / 验证 ──────────────────────────────────────────────────
@@ -237,11 +77,10 @@ namespace UTF.UI
         {
             try
             {
-                CollectAllFields();
-                await _configManager.SaveUnifiedConfigurationAsync(_config);
-                await _configManager.RefreshConfiguration();
-                ValidationStatusText.Text = "✅ 配置已保存";
-                ValidationStatusText.Foreground = System.Windows.Media.Brushes.Green;
+                // MVVM: 所有字段（含原手动同步的 ComboBox/ListBox/DataGrid）现由 VM 双向绑定维护；
+                // SaveCommand 内部会调用 SyncToConfig 写回 Config 后持久化。
+                await _viewModel.SaveCommand.ExecuteAsync(null);
+                SyncValidationDisplay();
                 DialogResult = true;
             }
             catch (Exception ex)
@@ -250,243 +89,50 @@ namespace UTF.UI
             }
         }
 
-        private void ReloadConfig_Click(object sender, RoutedEventArgs e)
+        private async void ReloadConfig_Click(object sender, RoutedEventArgs e)
         {
-            Window_Loaded(sender, e);
+            await _viewModel.ReloadCommand.ExecuteAsync(null);
+            SyncValidationDisplay();
         }
 
         private void ValidateConfig_Click(object sender, RoutedEventArgs e)
         {
-            var errors = new List<string>();
+            // P4-27: collect the current UI fields into Config via VM, then delegate validation to the
+            // IConfigurationAdapter (single source of truth - supports contains:/equals:/regex:/notcontains:).
+            var errors = _viewModel.Validate();
+            SyncValidationDisplay();
 
-            // 基本字段
-            if (string.IsNullOrWhiteSpace(ProductNameText.Text))
-                errors.Add("产品名称不能为空");
-            if (!int.TryParse(MaxConcurrentText.Text, out int maxC) || maxC <= 0)
-                errors.Add("最大并发数必须为正整数");
-            if (!int.TryParse(TestTimeoutText.Text, out int tout) || tout <= 0)
-                errors.Add("测试超时必须为正整数（秒）");
-
-            // 测试步骤验证
-            if (TestStepsGrid.ItemsSource is System.Collections.ObjectModel.ObservableCollection<TestStepConfig> steps)
+            if (errors != null && errors.Any())
             {
-                if (!steps.Any())
-                {
-                    errors.Add("至少需要配置一个测试步骤");
-                }
-                else
-                {
-                    // ID唯一性
-                    var ids = steps.Select(s => s.Id).Where(id => !string.IsNullOrEmpty(id)).ToList();
-                    if (ids.Count != ids.Distinct(StringComparer.OrdinalIgnoreCase).Count())
-                        errors.Add("存在重复的步骤ID");
-
-                    foreach (var step in steps)
-                    {
-                        if (string.IsNullOrWhiteSpace(step.Name))
-                            errors.Add($"步骤 {step.Id} 名称不能为空");
-                        if (step.Timeout.HasValue && step.Timeout.Value < 0)
-                            errors.Add($"步骤 '{step.Name}' 超时值不能为负数");
-
-                        // 验证 Expected 前缀
-                        if (!string.IsNullOrEmpty(step.Expected))
-                        {
-                            var validPrefixes = new[] { "contains:", "equals:", "regex:", "notcontains:" };
-                            bool hasPrefix = validPrefixes.Any(p => step.Expected.StartsWith(p, StringComparison.OrdinalIgnoreCase));
-                            if (!hasPrefix && step.Expected.Contains(':'))
-                                errors.Add($"步骤 '{step.Name}' 的期望结果前缀无效（支持 contains:/equals:/regex:）");
-                        }
-                    }
-                }
-            }
-
-            if (errors.Any())
-            {
-                ValidationStatusText.Text = $"❌ {errors.First()}";
-                ValidationStatusText.Foreground = System.Windows.Media.Brushes.Red;
                 MessageBox.Show(string.Join("\n", errors), "验证失败", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-            else
+        }
+
+        /// <summary>
+        /// 将 VM 的 ValidationStatus / ValidationStatusColor 同步到 ValidationStatusText 控件。
+        /// </summary>
+        private void SyncValidationDisplay()
+        {
+            if (ValidationStatusText == null) return;
+            ValidationStatusText.Text = _viewModel.ValidationStatus;
+            try
             {
-                ValidationStatusText.Text = "✅ 配置有效";
+                var brush = new System.Windows.Media.BrushConverter().ConvertFromString(_viewModel.ValidationStatusColor ?? string.Empty) as System.Windows.Media.Brush;
+                ValidationStatusText.Foreground = brush ?? System.Windows.Media.Brushes.Green;
+            }
+            catch
+            {
                 ValidationStatusText.Foreground = System.Windows.Media.Brushes.Green;
             }
         }
 
-        // ── 测试步骤管理 ─────────────────────────────────────────────────────────
-
-        private void AddStep_Click(object sender, RoutedEventArgs e)
-        {
-            if (TestStepsGrid.ItemsSource is System.Collections.ObjectModel.ObservableCollection<TestStepConfig> steps)
-            {
-                var step = new TestStepConfig
-                {
-                    Id = Guid.NewGuid().ToString("N")[..8],
-                    Name = "新步骤",
-                    Order = steps.Count + 1,
-                    Enabled = true,
-                    Type = string.Empty,
-                    Channel = string.Empty,
-                    Target = "dut",
-                    Timeout = 5000
-                };
-                steps.Add(step);
-                TestStepsGrid.SelectedItem = step;
-                ShowStepDetail();
-            }
-        }
-
-        private void DeleteStep_Click(object sender, RoutedEventArgs e)
-        {
-            if (TestStepsGrid.SelectedItem is TestStepConfig step &&
-                TestStepsGrid.ItemsSource is System.Collections.ObjectModel.ObservableCollection<TestStepConfig> steps)
-            {
-                steps.Remove(step);
-                RenumberSteps(steps);
-                StepDetailPanel.Visibility = Visibility.Collapsed;
-            }
-        }
-
-        private void MoveStepUp_Click(object sender, RoutedEventArgs e)
-        {
-            if (TestStepsGrid.SelectedItem is TestStepConfig step &&
-                TestStepsGrid.ItemsSource is System.Collections.ObjectModel.ObservableCollection<TestStepConfig> steps)
-            {
-                int idx = steps.IndexOf(step);
-                if (idx > 0) { steps.Move(idx, idx - 1); RenumberSteps(steps); }
-            }
-        }
-
-        private void MoveStepDown_Click(object sender, RoutedEventArgs e)
-        {
-            if (TestStepsGrid.SelectedItem is TestStepConfig step &&
-                TestStepsGrid.ItemsSource is System.Collections.ObjectModel.ObservableCollection<TestStepConfig> steps)
-            {
-                int idx = steps.IndexOf(step);
-                if (idx < steps.Count - 1) { steps.Move(idx, idx + 1); RenumberSteps(steps); }
-            }
-        }
-
-        private static void RenumberSteps(System.Collections.ObjectModel.ObservableCollection<TestStepConfig> steps)
-        {
-            for (int i = 0; i < steps.Count; i++) steps[i].Order = i + 1;
-        }
-
-        private void CopyStep_Click(object sender, RoutedEventArgs e)
-        {
-            if (TestStepsGrid.SelectedItem is TestStepConfig step &&
-                TestStepsGrid.ItemsSource is System.Collections.ObjectModel.ObservableCollection<TestStepConfig> steps)
-            {
-                var copy = new TestStepConfig
-                {
-                    Id = Guid.NewGuid().ToString("N")[..8],
-                    Name = step.Name + " (副本)",
-                    Order = steps.Count + 1,
-                    Enabled = step.Enabled,
-                    Type = step.Type,
-                    Channel = step.Channel,
-                    Target = step.Target,
-                    Description = step.Description,
-                    Command = step.Command,
-                    Expected = step.Expected,
-                    Timeout = step.Timeout,
-                    Delay = step.Delay,
-                    ContinueOnFailure = step.ContinueOnFailure
-                };
-                steps.Add(copy);
-                TestStepsGrid.SelectedItem = copy;
-                ShowStepDetail();
-            }
-        }
-
-        private void TestStepsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            ShowStepDetail();
-        }
-
-        private void ShowStepDetail()
-        {
-            if (TestStepsGrid.SelectedItem is TestStepConfig step)
-            {
-                StepDetailPanel.Visibility = Visibility.Visible;
-                DetailIdText.Text = step.Id;
-                DetailNameText.Text = step.Name;
-                SetComboByContent(DetailTypeCombo, step.Type ?? string.Empty);
-                SetComboByContent(DetailChannelCombo, step.Channel ?? string.Empty);
-                SetComboByContent(DetailTargetCombo, step.Target ?? "dut");
-                DetailDescriptionText.Text = step.Description ?? "";
-                DetailCommandText.Text = step.Command ?? "";
-                DetailExpectedText.Text = step.Expected ?? "";
-                DetailTimeoutText.Text = step.Timeout?.ToString() ?? "";
-                DetailDelayText.Text = step.Delay?.ToString() ?? "";
-                DetailContinueOnFailureCheck.IsChecked = step.ContinueOnFailure;
-
-                // MaxRetries 存储在 Parameters["MaxRetries"]
-                var maxRetries = step.Parameters?.ContainsKey("MaxRetries") == true
-                    ? step.Parameters["MaxRetries"]?.ToString() ?? ""
-                    : "";
-                DetailMaxRetriesText.Text = maxRetries;
-            }
-            else
-            {
-                StepDetailPanel.Visibility = Visibility.Collapsed;
-            }
-        }
-
-        private void ApplyStepDetail_Click(object sender, RoutedEventArgs e)
-        {
-            if (TestStepsGrid.SelectedItem is TestStepConfig step)
-            {
-                step.Id = DetailIdText.Text;
-                step.Name = DetailNameText.Text;
-                step.Type = !string.IsNullOrWhiteSpace(DetailTypeCombo.Text) ? DetailTypeCombo.Text : step.Type;
-                step.Channel = !string.IsNullOrWhiteSpace(DetailChannelCombo.Text) ? DetailChannelCombo.Text : step.Channel;
-                step.Target = !string.IsNullOrWhiteSpace(DetailTargetCombo.Text) ? DetailTargetCombo.Text : step.Target;
-                step.Description = DetailDescriptionText.Text;
-                step.Command = DetailCommandText.Text;
-                step.Expected = DetailExpectedText.Text;
-                if (int.TryParse(DetailTimeoutText.Text, out int timeout)) step.Timeout = timeout;
-                if (int.TryParse(DetailDelayText.Text, out int delay)) step.Delay = delay;
-                step.ContinueOnFailure = DetailContinueOnFailureCheck.IsChecked == true;
-
-                // MaxRetries
-                if (!string.IsNullOrWhiteSpace(DetailMaxRetriesText.Text) &&
-                    int.TryParse(DetailMaxRetriesText.Text, out int maxRetries) && maxRetries > 0)
-                {
-                    step.Parameters ??= new Dictionary<string, object>();
-                    step.Parameters["MaxRetries"] = maxRetries;
-                }
-                else if (step.Parameters != null)
-                {
-                    step.Parameters.Remove("MaxRetries");
-                }
-
-                TestStepsGrid.Items.Refresh();
-            }
-        }
+        // ── 测试步骤详情编辑面板 ───────────────────────────────────────────────────
+        // 步骤列表的增删/移动/复制已迁移到 VM 命令（绑定到按钮 Command）。
+        // 步骤详情面板各字段已全部 TwoWay 绑定到 SelectedStep 子属性 + SelectedStepMaxRetries；
+        // 面板可见性由 NullToVisibilityConverter（绑定 SelectedStep）自动控制。
+        // 由于 TestStepConfig 未实现 INPC，"刷新列表"按钮触发 VM 的 RefreshStepsCommand
+        // 同步 SelectedStepMaxRetries 回写 + 提示 UI 重绘（仍需 CollectionView 重置或 Items.Refresh）。
 
         private void Cancel_Click(object sender, RoutedEventArgs e) => Close();
-
-        private static void SetComboByContent(ComboBox combo, string value, bool partialMatch = false)
-        {
-            foreach (ComboBoxItem item in combo.Items)
-            {
-                var content = item.Content?.ToString() ?? "";
-                if (partialMatch ? content.Contains(value) : content == value)
-                {
-                    combo.SelectedItem = item;
-                    return;
-                }
-            }
-
-            if (combo.IsEditable)
-            {
-                combo.Text = value;
-                combo.SelectedItem = null;
-                return;
-            }
-
-            if (combo.Items.Count > 0) combo.SelectedIndex = 0;
-        }
     }
 }

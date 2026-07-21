@@ -68,10 +68,17 @@ public sealed class TelnetDriverPlugin : DeviceDriverPluginBase
 
     public override bool CanHandle(string stepType, string channel)
     {
-        var normalizedType = (stepType ?? string.Empty).Trim().ToLowerInvariant();
-        var normalizedChannel = (channel ?? string.Empty).Trim().ToLowerInvariant();
-        return normalizedType is "network" or "telnet" or "tcp"
-            || normalizedChannel is "network" or "telnet" or "tcp";
+        // AND 语义：stepType 与 channel 必须同时匹配。
+        // 历史上支持 network/telnet/tcp 多通道，全部声明在集合中即可保持匹配。
+        var supportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "network", "telnet", "tcp"
+        };
+        var supportedChannels = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "network", "telnet", "tcp"
+        };
+        return DefaultCanHandle(stepType ?? string.Empty, channel ?? string.Empty, supportedTypes, supportedChannels);
     }
 
     protected override string ResolveEndpoint(StepExecutionRequest request)
@@ -94,14 +101,14 @@ public sealed class TelnetDriverPlugin : DeviceDriverPluginBase
             var port = parts.Length > 1 && int.TryParse(parts[1], out var p) ? p : _port;
 
             _client = new TcpClient();
-            await _client.ConnectAsync(host, port, ct);
+            await _client.ConnectAsync(host, port, ct).ConfigureAwait(false);
 
             _stream = _client.GetStream();
             _stream.ReadTimeout = _readTimeoutMs;
             _stream.WriteTimeout = _readTimeoutMs;
 
             // 读取并丢弃初始 Telnet 协商字节和欢迎信息
-            await DrainInitialDataAsync(ct);
+            await DrainInitialDataAsync(ct).ConfigureAwait(false);
 
             return true;
         }
@@ -120,10 +127,10 @@ public sealed class TelnetDriverPlugin : DeviceDriverPluginBase
         }
 
         var commandBytes = _encoding.GetBytes(command + _lineEnding);
-        await _stream.WriteAsync(commandBytes, ct);
-        await _stream.FlushAsync(ct);
+        await _stream.WriteAsync(commandBytes, ct).ConfigureAwait(false);
+        await _stream.FlushAsync(ct).ConfigureAwait(false);
 
-        return await ReadResponseAsync(ct);
+        return await ReadResponseAsync(ct).ConfigureAwait(false);
     }
 
     protected override Task DisconnectCoreAsync(CancellationToken ct)
@@ -136,42 +143,46 @@ public sealed class TelnetDriverPlugin : DeviceDriverPluginBase
     {
         var buffer = new byte[4096];
         var response = new StringBuilder();
-        var noDataCount = 0;
 
-        while (!ct.IsCancellationRequested)
+        // 用链接取消令牌施加读取超时上限，避免 DataAvailable 轮询 + Task.Delay 的忙等。
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        linkedCts.CancelAfter(_readTimeoutMs);
+
+        try
         {
-            try
+            while (!linkedCts.IsCancellationRequested)
             {
-                if (_stream!.DataAvailable)
+                int bytesRead;
+                try
                 {
-                    var bytesRead = await _stream.ReadAsync(buffer, ct);
-                    if (bytesRead > 0)
-                    {
-                        var chunk = FilterTelnetNegotiation(buffer, bytesRead);
-                        response.Append(_encoding.GetString(chunk));
-                        noDataCount = 0;
-
-                        // 检查是否到达提示符
-                        if (response.ToString().TrimEnd().EndsWith(_promptPattern, StringComparison.OrdinalIgnoreCase))
-                        {
-                            break;
-                        }
-                    }
+                    bytesRead = await _stream!.ReadAsync(buffer, linkedCts.Token).ConfigureAwait(false);
                 }
-                else
+                catch (IOException)
                 {
-                    await Task.Delay(100, ct);
-                    noDataCount++;
-                    if (noDataCount >= 30 && response.Length > 0)
+                    break;
+                }
+
+                if (bytesRead > 0)
+                {
+                    var chunk = FilterTelnetNegotiation(buffer, bytesRead);
+                    response.Append(_encoding.GetString(chunk));
+
+                    // 检查是否到达提示符
+                    if (response.ToString().TrimEnd().EndsWith(_promptPattern, StringComparison.OrdinalIgnoreCase))
                     {
                         break;
                     }
                 }
+                else
+                {
+                    // 对端关闭
+                    break;
+                }
             }
-            catch (IOException)
-            {
-                break;
-            }
+        }
+        catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            // 读取超时：返回已收到的内容（若有），与历史行为一致
         }
 
         return response.ToString().Trim();
@@ -182,10 +193,12 @@ public sealed class TelnetDriverPlugin : DeviceDriverPluginBase
         var buffer = new byte[4096];
         try
         {
-            await Task.Delay(500, ct);
+            await Task.Delay(500, ct).ConfigureAwait(false);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            linkedCts.CancelAfter(_readTimeoutMs);
             while (_stream!.DataAvailable)
             {
-                _ = await _stream.ReadAsync(buffer, 0, buffer.Length, ct);
+                _ = await _stream.ReadAsync(buffer.AsMemory(0, buffer.Length), linkedCts.Token).ConfigureAwait(false);
             }
         }
         catch
@@ -203,9 +216,10 @@ public sealed class TelnetDriverPlugin : DeviceDriverPluginBase
         int i = 0;
         while (i < length)
         {
-            if (data[i] == 0xFF && i + 2 < length)
+            // IAC 序列: FF XX XX — 跳过 3 字节。注意边界：i+2 <= length 才是一个完整的三字节序列。
+            // TODO(RFC854): 当前仅跳过固定 3 字节；应进一步处理 SB...SE 子协商可变长度。
+            if (data[i] == 0xFF && i + 2 <= length)
             {
-                // IAC 序列: FF XX XX — 跳过 3 字节
                 i += 3;
             }
             else

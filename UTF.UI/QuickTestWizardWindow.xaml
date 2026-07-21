@@ -6,6 +6,7 @@
         Background="#F0F2F5" ResizeMode="CanResizeWithGrip">
 
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <!-- 主按钮样式 -->
         <Style x:Key="PrimaryButton" TargetType="Button">
             <Setter Property="Background" Value="#007ACC"/>
@@ -188,10 +189,12 @@
 
                             <TextBlock Text="产品名称 *" Style="{StaticResource FieldLabel}"/>
                             <TextBox x:Name="WizProductName" Style="{StaticResource WizardTextBox}" Margin="0,0,0,12"
+                                     Text="{Binding ProductName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      TextChanged="OnProductInfoChanged"/>
 
                             <TextBlock Text="产品型号 *" Style="{StaticResource FieldLabel}"/>
                             <TextBox x:Name="WizProductModel" Style="{StaticResource WizardTextBox}" Margin="0,0,0,12"
+                                     Text="{Binding ProductModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      TextChanged="OnProductInfoChanged"/>
 
                             <Grid>
@@ -202,28 +205,15 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Text="产品类别" Style="{StaticResource FieldLabel}"/>
-                                    <ComboBox x:Name="WizProductCategory" FontSize="13" Padding="6,6" IsEditable="True">
-                                        <ComboBoxItem Content="消费电子产品"/>
-                                        <ComboBoxItem Content="汽车电子"/>
-                                        <ComboBoxItem Content="工业设备"/>
-                                        <ComboBoxItem Content="通信设备"/>
-                                        <ComboBoxItem Content="智能家居"/>
-                                        <ComboBoxItem Content="医疗设备"/>
-                                        <ComboBoxItem Content="其他"/>
-                                    </ComboBox>
+                                    <ComboBox x:Name="WizProductCategory" FontSize="13" Padding="6,6" IsEditable="True"
+                                              ItemsSource="{Binding AvailableCategories}"
+                                              Text="{Binding ProductCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="产品图标" Style="{StaticResource FieldLabel}"/>
-                                    <ComboBox x:Name="WizProductIcon" FontSize="16" Padding="6,4">
-                                        <ComboBoxItem Content="📱" IsSelected="True"/>
-                                        <ComboBoxItem Content="🖥️"/>
-                                        <ComboBoxItem Content="🔧"/>
-                                        <ComboBoxItem Content="🎮"/>
-                                        <ComboBoxItem Content="🔌"/>
-                                        <ComboBoxItem Content="💡"/>
-                                        <ComboBoxItem Content="🚗"/>
-                                        <ComboBoxItem Content="🏭"/>
-                                    </ComboBox>
+                                    <ComboBox x:Name="WizProductIcon" FontSize="16" Padding="6,4"
+                                              ItemsSource="{Binding AvailableIcons}"
+                                              SelectedItem="{Binding ProductIcon, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                             </Grid>
                         </StackPanel>
@@ -247,9 +237,10 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <Slider x:Name="WizDUTCount" Minimum="1" Maximum="64" Value="4"
+                                        <Slider x:Name="WizDUTCount" Minimum="1" Maximum="64"
                                                 IsSnapToTickEnabled="True" TickFrequency="1"
-                                                ValueChanged="OnDUTCountChanged" VerticalAlignment="Center"/>
+                                                ValueChanged="OnDUTCountChanged" VerticalAlignment="Center"
+                                                Value="{Binding DutCount, Mode=TwoWay}"/>
                                         <TextBlock Grid.Column="1" x:Name="WizDUTCountLabel" Text="4" FontSize="16"
                                                    FontWeight="Bold" Foreground="#007ACC" Margin="12,0,0,0"
                                                    Width="30" TextAlignment="Center" VerticalAlignment="Center"/>
@@ -259,8 +250,10 @@
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="通信方式" Style="{StaticResource FieldLabel}"/>
                                     <StackPanel Orientation="Horizontal">
-                                        <CheckBox x:Name="WizUseSerial" Content="串口通信" IsChecked="True" Margin="0,0,16,0" FontSize="12"/>
-                                        <CheckBox x:Name="WizUseNetwork" Content="网络通信" FontSize="12"/>
+                                        <CheckBox x:Name="WizUseSerial" Content="串口通信" Margin="0,0,16,0" FontSize="12"
+                                                  IsChecked="{Binding UseSerial, Mode=TwoWay}"/>
+                                        <CheckBox x:Name="WizUseNetwork" Content="网络通信" FontSize="12"
+                                                  IsChecked="{Binding UseNetwork, Mode=TwoWay}"/>
                                     </StackPanel>
                                 </StackPanel>
                             </Grid>
@@ -327,52 +320,50 @@
                                 <!-- Row 0: 步骤名称 + 测试类型 -->
                                 <StackPanel Grid.Row="0" Grid.Column="0">
                                     <TextBlock Text="步骤名称 *" Style="{StaticResource FieldLabel}"/>
-                                    <TextBox x:Name="WizStepName" Style="{StaticResource WizardTextBox}" Margin="0,0,0,10"/>
+                                    <TextBox x:Name="WizStepName" Style="{StaticResource WizardTextBox}" Margin="0,0,0,10"
+                                             Text="{Binding NewStepName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="0" Grid.Column="2">
                                     <TextBlock Text="测试类型 *" Style="{StaticResource FieldLabel}"/>
                                     <ComboBox x:Name="WizStepCategory" FontSize="13" Padding="6,6" Margin="0,0,0,10"
-                                              SelectionChanged="OnStepCategoryChanged"/>
+                                              ItemsSource="{Binding AvailableStepCategories}"
+                                              DisplayMemberPath="Label"
+                                              SelectedItem="{Binding SelectedStepCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
 
                                 <!-- Row 1: 命令 -->
                                 <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3">
                                     <TextBlock Text="测试命令" Style="{StaticResource FieldLabel}"/>
-                                    <TextBox x:Name="WizStepCommand" Style="{StaticResource WizardTextBox}" Margin="0,0,0,10"/>
-                                    <TextBlock x:Name="WizCommandHint" Text="" FontSize="11" Foreground="#888"
+                                    <TextBox x:Name="WizStepCommand" Style="{StaticResource WizardTextBox}" Margin="0,0,0,10"
+                                             Text="{Binding NewStepCommand, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock x:Name="WizCommandHint" Text="{Binding StepCommandHint}" FontSize="11" Foreground="#888"
                                                Margin="0,-6,0,8" TextWrapping="Wrap"/>
                                 </StackPanel>
 
                                 <!-- Row 2: 判定方式 + 判定值 -->
                                 <StackPanel Grid.Row="2" Grid.Column="0">
                                     <TextBlock Text="结果判定方式" Style="{StaticResource FieldLabel}"/>
-                                    <ComboBox x:Name="WizExpectedMode" FontSize="13" Padding="6,6" Margin="0,0,0,10">
-                                        <ComboBoxItem Content="包含文本（推荐）" Tag="contains" IsSelected="True"/>
-                                        <ComboBoxItem Content="完全匹配" Tag="equals"/>
-                                        <ComboBoxItem Content="正则表达式" Tag="regex"/>
-                                        <ComboBoxItem Content="不判定（仅执行）" Tag="none"/>
-                                    </ComboBox>
+                                    <ComboBox x:Name="WizExpectedMode" FontSize="13" Padding="6,6" Margin="0,0,0,10"
+                                              ItemsSource="{Binding ExpectedModeOptions}"
+                                              SelectedItem="{Binding SelectedExpectedMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="2">
                                     <TextBlock Text="期望的结果内容" Style="{StaticResource FieldLabel}"/>
-                                    <TextBox x:Name="WizExpectedValue" Style="{StaticResource WizardTextBox}" Margin="0,0,0,10"/>
+                                    <TextBox x:Name="WizExpectedValue" Style="{StaticResource WizardTextBox}" Margin="0,0,0,10"
+                                             Text="{Binding NewStepExpectedValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
 
                                 <!-- Row 3: 超时 -->
                                 <StackPanel Grid.Row="3" Grid.Column="0">
                                     <TextBlock Text="超时时间" Style="{StaticResource FieldLabel}"/>
-                                    <ComboBox x:Name="WizStepTimeout" FontSize="13" Padding="6,6" Margin="0,0,0,10">
-                                        <ComboBoxItem Content="5 秒（快速命令）" Tag="5000" IsSelected="True"/>
-                                        <ComboBoxItem Content="10 秒（普通命令）" Tag="10000"/>
-                                        <ComboBoxItem Content="30 秒（耗时操作）" Tag="30000"/>
-                                        <ComboBoxItem Content="60 秒（长时测试）" Tag="60000"/>
-                                        <ComboBoxItem Content="120 秒（超长测试）" Tag="120000"/>
-                                    </ComboBox>
+                                    <ComboBox x:Name="WizStepTimeout" FontSize="13" Padding="6,6" Margin="0,0,0,10"
+                                              ItemsSource="{Binding TimeoutOptions}"
+                                              SelectedItem="{Binding SelectedTimeout, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
 
                                 <!-- Row 3: Add Button -->
                                 <StackPanel Grid.Row="3" Grid.Column="2" VerticalAlignment="Bottom" Margin="0,0,0,10">
-                                    <Button Content="✚ 添加此步骤" Style="{StaticResource SuccessButton}" Click="AddWizardStep_Click"
+                                    <Button Content="✚ 添加此步骤" Style="{StaticResource SuccessButton}" Command="{Binding AddStepCommand}"
                                             HorizontalAlignment="Left"/>
                                 </StackPanel>
                             </Grid>
@@ -384,11 +375,11 @@
                         <StackPanel>
                             <Grid>
                                 <TextBlock Text="📋 已添加的测试步骤" FontSize="15" FontWeight="SemiBold" Foreground="#2C3E50"/>
-                                <TextBlock x:Name="WizStepCountLabel" Text="共 0 步" FontSize="12" Foreground="#888"
+                                <TextBlock x:Name="WizStepCountLabel" Text="{Binding Steps.Count, StringFormat=共 {0} 步}" FontSize="12" Foreground="#888"
                                            HorizontalAlignment="Right" VerticalAlignment="Center"/>
                             </Grid>
 
-                            <ItemsControl x:Name="WizStepList" Margin="0,12,0,0">
+                            <ItemsControl x:Name="WizStepList" Margin="0,12,0,0" ItemsSource="{Binding Steps}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Background="#F7F9FC" CornerRadius="6" Padding="14,10" Margin="0,0,0,6">
@@ -409,23 +400,27 @@
                                                 <StackPanel Grid.Column="1" Margin="8,0">
                                                     <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"/>
                                                     <TextBlock FontSize="11" Foreground="#888">
-                                                        <Run Text="{Binding CategoryLabel, Mode=OneWay}"/>
-                                                        <Run Text=" · "/>
-                                                        <Run Text="{Binding CommandPreview, Mode=OneWay}"/>
+                                                        <Run Text="{Binding StepType, Mode=OneWay}"/>
+                                                        <Run Text=" / "/>
+                                                        <Run Text="{Binding Channel, Mode=OneWay}"/>
                                                     </TextBlock>
+                                                    <TextBlock FontSize="11" Foreground="#888" Text="{Binding Command, Mode=OneWay}" TextTrimming="CharacterEllipsis"/>
                                                 </StackPanel>
                                                 <!-- 上移 -->
                                                 <Button Grid.Column="2" Content="▲" FontSize="10" Padding="6,2"
                                                         Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                                        Tag="{Binding Id}" Click="MoveWizStepUp_Click"/>
+                                                        Command="{Binding DataContext.MoveStepUpCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"/>
                                                 <!-- 下移 -->
                                                 <Button Grid.Column="3" Content="▼" FontSize="10" Padding="6,2"
                                                         Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                                        Tag="{Binding Id}" Click="MoveWizStepDown_Click"/>
+                                                        Command="{Binding DataContext.MoveStepDownCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"/>
                                                 <!-- 删除 -->
                                                 <Button Grid.Column="4" Content="✕" FontSize="12" Padding="6,2" Margin="4,0,0,0"
                                                         Foreground="#DC3545" Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                                        Tag="{Binding Id}" Click="RemoveWizStep_Click"/>
+                                                        Command="{Binding DataContext.RemoveStepCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"/>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -433,7 +428,8 @@
                             </ItemsControl>
 
                             <TextBlock x:Name="WizNoStepHint" Text="还没有添加任何测试步骤，请在上方选择类型并添加"
-                                       FontSize="12" Foreground="#AAA" HorizontalAlignment="Center" Margin="0,20,0,20"/>
+                                       FontSize="12" Foreground="#AAA" HorizontalAlignment="Center" Margin="0,20,0,20"
+                                       Visibility="{Binding HasNoSteps, Converter={StaticResource BoolToVisibilityConverter}}"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -453,15 +449,15 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock x:Name="WizReviewIcon" Grid.Column="0" Text="📱" FontSize="28" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                    <TextBlock x:Name="WizReviewIcon" Grid.Column="0" Text="{Binding ProductIcon}" FontSize="28" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock x:Name="WizReviewProductName" Text="" FontSize="16" FontWeight="Bold" Foreground="#1A1A2E"/>
+                                        <TextBlock x:Name="WizReviewProductName" Text="{Binding ProductName}" FontSize="16" FontWeight="Bold" Foreground="#1A1A2E"/>
                                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                            <TextBlock x:Name="WizReviewProductModel" Text="" FontSize="12" Foreground="#555"/>
+                                            <TextBlock x:Name="WizReviewProductModel" Text="{Binding ProductModel}" FontSize="12" Foreground="#555"/>
                                             <TextBlock Text=" · " Foreground="#CCC"/>
-                                            <TextBlock x:Name="WizReviewCategory" Text="" FontSize="12" Foreground="#555"/>
+                                            <TextBlock x:Name="WizReviewCategory" Text="{Binding ProductCategory}" FontSize="12" Foreground="#555"/>
                                             <TextBlock Text=" · " Foreground="#CCC"/>
-                                            <TextBlock x:Name="WizReviewDUTCount" Text="" FontSize="12" Foreground="#007ACC" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="WizReviewDUTCount" Text="{Binding DutCount, StringFormat={}{0} 个工位}" FontSize="12" Foreground="#007ACC" FontWeight="SemiBold"/>
                                         </StackPanel>
                                     </StackPanel>
                                 </Grid>
@@ -469,7 +465,7 @@
 
                             <!-- 步骤预览 -->
                             <TextBlock Text="测试流程" FontSize="13" FontWeight="SemiBold" Foreground="#555" Margin="0,0,0,8"/>
-                            <ItemsControl x:Name="WizReviewStepList">
+                            <ItemsControl x:Name="WizReviewStepList" ItemsSource="{Binding Steps}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -478,7 +474,7 @@
                                                            Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
                                             <TextBlock Text="{Binding Name}" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                            <TextBlock Text="{Binding CategoryLabel, Mode=OneWay}" FontSize="11" Foreground="#888"
+                                            <TextBlock Text="{Binding StepType, Mode=OneWay}" FontSize="11" Foreground="#888"
                                                        VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </DataTemplate>
@@ -492,9 +488,11 @@
                             <TextBlock Text="💾 保存选项" FontSize="15" FontWeight="SemiBold" Foreground="#2C3E50" Margin="0,0,0,16"/>
 
                             <CheckBox x:Name="WizSaveAsDefault" Content="设为当前默认测试配置（覆盖 unified-config.json）"
-                                      IsChecked="True" FontSize="12" Margin="0,0,0,8"/>
+                                      FontSize="12" Margin="0,0,0,8"
+                                      IsChecked="{Binding SaveAsDefault, Mode=TwoWay}"/>
                             <CheckBox x:Name="WizExportCopy" Content="同时导出一份副本到文件"
-                                      IsChecked="False" FontSize="12"/>
+                                      FontSize="12"
+                                      IsChecked="{Binding ExportCopy, Mode=TwoWay}"/>
                         </StackPanel>
                     </Border>
 

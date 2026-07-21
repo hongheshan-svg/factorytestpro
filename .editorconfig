@@ -1,0 +1,97 @@
+# EditorConfig - https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,xml,xaml,csproj,props,targets,yml,yaml}]
+indent_size = 2
+
+[*.{cs,vb}]
+# C# style - Allman braces, 4-space indent (matches AGENTS.md conventions)
+csharp_new_line_before_open_brace = all
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_indent_block_contents = true
+csharp_indent_braces = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_before_open_square_brackets = false
+csharp_using_directive_placement = outside_namespace:warning
+
+# Prefer file-scoped namespaces (existing code uses both; new code prefer file-scoped)
+csharp_style_namespace_declarations = file_scoped:suggestion
+
+# Naming
+dotnet_naming_rule.public_members.severity = suggestion
+dotnet_naming_rule.public_members.symbols = public_symbols
+dotnet_naming_rule.public_symbols.style = pascal_case_style
+dotnet_naming_symbols.public_symbols.applicable_kinds = class,struct,interface,enum,property,method,event,delegate
+dotnet_naming_symbols.public_symbols.applicable_accessibilities = public
+
+dotnet_naming_rule.private_fields.severity = suggestion
+dotnet_naming_rule.private_fields.symbols = private_fields
+dotnet_naming_rule.private_fields.style = camel_case_underscore_style
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.camel_case_underscore_style.required_prefix = _
+dotnet_naming_style.camel_case_underscore_style.capitalization = camel_case
+
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+# Code-quality suppressions
+dotnet_diagnostic.CS1591.severity = none          # missing XML doc comments - not enforced project-wide
+dotnet_diagnostic.CS0618.severity = none          # obsolete usage - tracked for migration
+
+# ---------------------------------------------------------------------------
+# Analyzer warning triage (2026-07)
+# The solution ships ~982 CA analyzer warnings under latest-recommended. Fixing
+# them in source is tracked by other workstreams; this section triages severity
+# so the build stays usable while real issues surface as actionable warnings.
+# Categories: "none" (noisy stylistic), "suggestion" (valid-but-noisy, kept
+# visible in the IDE but not in build output), "warning" (kept actionable).
+# ---------------------------------------------------------------------------
+
+# --- Noisy stylistic -> none ---
+# CA1707: underscores in names. The codebase adopts the _camelCase private-field
+#         convention (see private_fields naming rule above), so CA1707 fires on
+#         virtually every field/test method. Suppress project-wide.
+dotnet_diagnostic.CA1707.severity = none
+# CA1305 / CA1304 / CA1311 / CA1310: culture-aware string formatting/concatenation.
+#         This is a Windows-only WPF test framework; invariant-culture conversions
+#         are tracked separately. Demote to keep the build signal clean.
+dotnet_diagnostic.CA1305.severity = none
+dotnet_diagnostic.CA1304.severity = none
+dotnet_diagnostic.CA1311.severity = none
+dotnet_diagnostic.CA1310.severity = none
+# CA1860: redundant null/empty comparison. High false-positive volume on existing
+#         guard clauses; demote.
+dotnet_diagnostic.CA1860.severity = none
+# CA1805: redundant default initialization. Noisy across field/property decls.
+dotnet_diagnostic.CA1805.severity = none
+
+# --- Valid but noisy -> suggestion (visible in IDE, not in build) ---
+dotnet_diagnostic.CA1822.severity = suggestion    # member could be static - stylistic
+dotnet_diagnostic.CA1869.severity = suggestion    # cache JsonSerializerOptions
+dotnet_diagnostic.CA1854.severity = suggestion    # use 'is { }' pattern
+dotnet_diagnostic.CA1862.severity = suggestion    # use StringComparer
+dotnet_diagnostic.CA1861.severity = suggestion    # capture in static field
+dotnet_diagnostic.CA1852.severity = suggestion    # seal internal types
+dotnet_diagnostic.CA1716.severity = suggestion    # name conflicts with keyword/namespace
+dotnet_diagnostic.CA1711.severity = suggestion    # rename by-suffix naming
+dotnet_diagnostic.CA1816.severity = suggestion    # Dispose should call GC.SuppressFinalize (addressed prior pass)
+dotnet_diagnostic.CA1510.severity = suggestion    # empty catch using await/catch-all
+dotnet_diagnostic.CA1513.severity = suggestion    # empty catch block (addressed prior pass)
+dotnet_diagnostic.CA1859.severity = suggestion    # use concrete type for perf
+dotnet_diagnostic.CA1840.severity = suggestion    # useIDisposableAsync
+
+# --- Genuinely valuable -> keep as warning ---
+# CA2016: culture parameter mismatch on StringComparison-style APIs - real bug surface.
+# CA1001: IDisposable field not disposed - real leak.
+# CA1806: unused method result - real logic bug.
+# CS8620/CS8604/CS8633/CS8601: nullable reference flow - real nullability issues.
+

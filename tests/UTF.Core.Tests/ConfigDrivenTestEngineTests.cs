@@ -32,7 +32,7 @@ public class ConfigDrivenTestEngineTests : IDisposable
 
     #region ExecuteStepAsync - 基本行为
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ExecuteStepAsync_DisabledStep_IsSkipped()
     {
         var step = new ConfigTestStep
@@ -51,7 +51,7 @@ public class ConfigDrivenTestEngineTests : IDisposable
         Assert.True(result.Skipped);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ExecuteStepAsync_ConditionNotMet_IsSkipped()
     {
         var step = new ConfigTestStep
@@ -69,7 +69,7 @@ public class ConfigDrivenTestEngineTests : IDisposable
         Assert.True(result.Skipped);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ExecuteStepAsync_ConditionMet_Executes()
     {
         var step = new ConfigTestStep
@@ -88,7 +88,7 @@ public class ConfigDrivenTestEngineTests : IDisposable
         Assert.False(result.Skipped);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ExecuteStepAsync_UnknownTypeWithoutPlugin_ReturnsFailure()
     {
         var step = new ConfigTestStep
@@ -107,7 +107,7 @@ public class ConfigDrivenTestEngineTests : IDisposable
         Assert.Contains("未找到可处理步骤类型", result.ErrorMessage);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ExecuteStepAsync_WithMockOutput_UsesMockOutputWithoutPlugin()
     {
         var step = new ConfigTestStep
@@ -135,7 +135,7 @@ public class ConfigDrivenTestEngineTests : IDisposable
 
     #region ExecuteStepAsync - 超时
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ExecuteStepAsync_Cancelled_ReturnsFailure()
     {
         var step = new ConfigTestStep
@@ -160,7 +160,7 @@ public class ConfigDrivenTestEngineTests : IDisposable
 
     #region ExecuteStepAsync - StoreResultAs上下文传递
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ExecuteStepAsync_StoreResultAs_SavesOutputToContext()
     {
         var step = new ConfigTestStep
@@ -185,7 +185,7 @@ public class ConfigDrivenTestEngineTests : IDisposable
 
     #region ExecuteProjectAsync
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ExecuteProjectAsync_EmptySteps_ReturnsPassingReport()
     {
         var project = new ConfigTestProject
@@ -201,7 +201,7 @@ public class ConfigDrivenTestEngineTests : IDisposable
         Assert.Equal("proj-1", report.ProjectId);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public async Task ExecuteProjectAsync_DisabledProject_ReturnsEmptyReport()
     {
         var project = new ConfigTestProject

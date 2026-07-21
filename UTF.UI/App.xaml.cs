@@ -20,7 +20,7 @@ public partial class App : Application
 {
     private IServiceProvider? _serviceProvider;
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         try
         {
@@ -33,10 +33,21 @@ public partial class App : Application
             // 配置依赖注入
             var services = new ServiceCollection();
             ConfigureServices(services);
-            _serviceProvider = services.BuildServiceProvider();
+            _serviceProvider = services.BuildServiceProvider(new ServiceProviderOptions
+            {
+                ValidateOnBuild = true,
+                ValidateScopes = true
+            });
+
+            var loginWindow = _serviceProvider.GetRequiredService<LoginWindow>();
+            if (loginWindow.ShowDialog() != true)
+            {
+                Shutdown();
+                return;
+            }
 
             // 启动时验证配置
-            ValidateConfiguration(_serviceProvider);
+            await ValidateConfigurationAsync(_serviceProvider);
 
             // 从 DI 容器获取主窗口
             var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
@@ -72,16 +83,19 @@ public partial class App : Application
 
         // 注册 UI 窗口（瞬态，每次打开新窗口都创建新实例）
         services.AddTransient<MainWindow>();
+        services.AddTransient<LoginWindow>();
         services.AddTransient<TestPlanEditorWindow>();
-        services.AddTransient<DUTTestListWindow>();
         services.AddTransient<ConfigurationCenterWindow>();
         services.AddTransient<QuickTestWizardWindow>();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        // 释放 DI 容器
-        if (_serviceProvider is IDisposable disposable)
+        if (_serviceProvider is IAsyncDisposable asyncDisposable)
+        {
+            asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        else if (_serviceProvider is IDisposable disposable)
         {
             disposable.Dispose();
         }
@@ -100,7 +114,7 @@ public partial class App : Application
     {
         WriteCrashLog($"DispatcherUnhandledException: {e.Exception}");
         MessageBox.Show($"界面异常: {e.Exception.Message}", "界面错误", MessageBoxButton.OK, MessageBoxImage.Error);
-        e.Handled = true; // 防止应用程序崩溃
+        e.Handled = false;
     }
 
     private static void WriteCrashLog(string message)
@@ -116,19 +130,15 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// 启动时验证配置，如有错误则警告用户但不阻塞启动
+    /// 启动时验证配置；无效配置必须阻止平台进入运行状态。
     /// </summary>
-    private void ValidateConfiguration(IServiceProvider serviceProvider)
+    private async Task ValidateConfigurationAsync(IServiceProvider serviceProvider)
     {
-        try
-        {
-            var validator = serviceProvider.GetService<CompositeConfigurationValidator>();
-            if (validator == null) return;
+        var validator = serviceProvider.GetRequiredService<CompositeConfigurationValidator>();
+        var configManager = serviceProvider.GetRequiredService<UTF.UI.Services.ConfigurationManager>();
 
-            var configManager = serviceProvider.GetService<UTF.UI.Services.ConfigurationManager>();
-            if (configManager == null) return;
-
-            var config = Task.Run(() => configManager.GetUnifiedConfigurationAsync()).GetAwaiter().GetResult();
+            // P1-6: await directly instead of Task.Run(...).GetAwaiter().GetResult()
+            var config = await configManager.GetUnifiedConfigurationAsync();
 
             var systemConfig = new UTF.Configuration.Models.SystemConfig
             {
@@ -170,20 +180,10 @@ public partial class App : Application
 
             var result = validator.ValidateAll(systemConfig, dutConfig, testConfig);
 
-            if (!result.IsValid)
-            {
-                var logger = serviceProvider.GetService<UTF.Logging.ILogger>();
-                foreach (var error in result.AllErrors)
-                {
-                    logger?.Warning($"配置验证: {error}");
-                }
-            }
-        }
-        catch (Exception ex)
+        if (!result.IsValid)
         {
-            // 配置验证失败不应阻塞启动
-            System.Diagnostics.Debug.WriteLine($"配置验证异常: {ex.Message}");
+            throw new System.IO.InvalidDataException(
+                $"配置验证失败: {string.Join("; ", result.AllErrors)}");
         }
     }
 }
-

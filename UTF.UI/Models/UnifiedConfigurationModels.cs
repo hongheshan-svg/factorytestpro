@@ -207,12 +207,16 @@ namespace UTF.UI.Services
         public bool Enabled { get; set; } = true;
 
         public string? Target { get; set; }
+        public string? TargetDeviceId { get; set; }
         public string? Type { get; set; }
         public string? Command { get; set; }
         public string? Expected { get; set; }
         public int? Timeout { get; set; }
         public int? Delay { get; set; }
+        public int? RetryCount { get; set; }
         public string? Channel { get; set; }
+        public string? StoreResultAs { get; set; }
+        public string? ConditionExpression { get; set; }
 
         public bool ContinueOnFailure { get; set; } = false;
         public Dictionary<string, object>? ValidationRules { get; set; }

@@ -9,7 +9,7 @@ namespace UTF.Core.Tests;
 
 public class ConfigDrivenReportBridgeTests
 {
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ConvertToDataSet_SingleReport_CorrectRowCount()
     {
         var report = CreateSampleReport(stepCount: 5, passedCount: 3);
@@ -19,7 +19,7 @@ public class ConfigDrivenReportBridgeTests
         Assert.Equal(5, dataSet.Rows.Count);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ConvertToDataSet_SingleReport_CorrectSummaryItems()
     {
         var report = CreateSampleReport(stepCount: 4, passedCount: 3);
@@ -37,7 +37,7 @@ public class ConfigDrivenReportBridgeTests
         Assert.Equal(75.0, passRateItem.Value);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ConvertToDataSet_EmptySteps_ZeroPassRate()
     {
         var report = new ConfigDrivenTestReport
@@ -54,7 +54,7 @@ public class ConfigDrivenReportBridgeTests
         Assert.Equal(0.0, passRate.Value);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ConvertToDataSet_SkippedSteps_MarkedAsSkip()
     {
         var report = new ConfigDrivenTestReport
@@ -72,7 +72,7 @@ public class ConfigDrivenReportBridgeTests
         Assert.Equal("SKIP", dataSet.Rows[0]["TestResult"]);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ConvertToDataSet_ColumnsMatchExpected()
     {
         var report = CreateSampleReport(1, 1);
@@ -86,7 +86,7 @@ public class ConfigDrivenReportBridgeTests
         Assert.Contains("ExecutionTime", dataSet.Columns);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void MergeReportsToDataSet_MultipleReports_AggregatesCorrectly()
     {
         var reports = new List<ConfigDrivenTestReport>
@@ -105,7 +105,7 @@ public class ConfigDrivenReportBridgeTests
         Assert.Equal(2, dutCount.Value);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void MergeReportsToDataSet_EmptyList_ReturnsZeros()
     {
         var merged = ConfigDrivenReportBridge.MergeReportsToDataSet(new List<ConfigDrivenTestReport>());
@@ -115,7 +115,7 @@ public class ConfigDrivenReportBridgeTests
         Assert.Equal(0, totalItem.Value);
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ConvertToDataSet_Metadata_ContainsProjectInfo()
     {
         var report = CreateSampleReport(2, 2);

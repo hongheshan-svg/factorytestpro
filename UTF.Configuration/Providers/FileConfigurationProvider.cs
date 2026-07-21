@@ -5,7 +5,7 @@ using UTF.Configuration.Abstractions;
 
 namespace UTF.Configuration;
 
-public class FileConfigurationProvider<T> : IConfigurationProvider<T> where T : class
+public class FileConfigurationProvider<T> : IFileConfigurationProvider<T> where T : class
 {
     private readonly string _filePath;
     private readonly IConfigurationSerializer _serializer;

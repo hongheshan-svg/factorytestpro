@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using UTF.Configuration;
 using UTF.Core;
@@ -9,15 +10,21 @@ using UTF.Core.Caching;
 
 namespace UTF.UI.Services
 {
-    public class ConfigurationManager : IConfigurationService
+    /// <summary>
+    /// 统一配置服务实现，缓存 + 文件持久化。
+    /// 作为单例注册于 DI 容器，宿主关闭时会调用 <see cref="Dispose"/> 释放内部信号量。
+    /// </summary>
+    public class ConfigurationManager : IConfigurationService, IDisposable
     {
         private readonly string _configDirectory;
         private readonly IConfigurationAdapter _configAdapter;
+        private readonly SemaphoreSlim _fileLock = new(1, 1);
 
         // 优化的缓存系统（性能提升90%）
         private readonly ICache _cache;
         private const string UNIFIED_CONFIG_CACHE_KEY = "unified-configuration";
         private static readonly TimeSpan ConfigCacheExpiration = TimeSpan.FromMinutes(15);
+        private bool _disposed;
 
         public event EventHandler? ConfigurationChanged;
 
@@ -32,6 +39,17 @@ namespace UTF.UI.Services
             {
                 Directory.CreateDirectory(_configDirectory);
             }
+        }
+
+        /// <summary>
+        /// 释放内部信号量资源。
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _fileLock.Dispose();
+            GC.SuppressFinalize(this);
         }
 
         public async Task<UnifiedConfiguration> GetUnifiedConfigurationAsync()
@@ -54,8 +72,13 @@ namespace UTF.UI.Services
 
         public Task<TestProjectConfiguration> GetTestProjectConfigurationAsync()
         {
-            // 为了保持兼容性，返回一个空的TestProjectConfiguration
-            return Task.FromResult(new TestProjectConfiguration());
+            return GetTestProjectConfigurationCoreAsync();
+        }
+
+        private async Task<TestProjectConfiguration> GetTestProjectConfigurationCoreAsync()
+        {
+            var configuration = await GetUnifiedConfigurationAsync();
+            return configuration.TestProjectConfiguration ?? new TestProjectConfiguration();
         }
 
         public async Task<TestProjectConfiguration?> GetSimpleTestProjectConfigurationAsync()
@@ -84,30 +107,31 @@ namespace UTF.UI.Services
                         // 验证配置完整性
                         if (!_configAdapter.ValidateConfiguration(config))
                         {
-                            Console.WriteLine("警告: 配置文件验证失败，使用默认配置");
-                            return CreateDefaultConfiguration();
+                            var errors = _configAdapter.ValidateConfigurationWithErrors(config);
+                            throw new InvalidDataException($"配置文件验证失败: {string.Join("; ", errors)}");
                         }
 
-                        Console.WriteLine($"配置加载成功: {_configAdapter.GetConfigurationSummary(config)}");
+                        System.Diagnostics.Debug.WriteLine($"配置加载成功: {_configAdapter.GetConfigurationSummary(config)}");
                         return config;
                     }
                 }
                 else
                 {
-                    Console.WriteLine("统一配置文件不存在，创建默认配置");
-                    
-                    // 如果统一配置文件不存在，尝试从分散的配置文件中合并
-                    var config = await MergeFromSeparateConfigFilesAsync();
+                    System.Diagnostics.Debug.WriteLine("统一配置文件不存在，创建默认配置");
 
-                    // 保存合并后的配置到统一配置文件
+                    // P4-25: 原先调用 MergeFromSeparateConfigFilesAsync（仅读取分散文件但从不映射字段，
+                    // 返回空配置）。改为直接创建默认配置，避免持久化一个空壳配置。
+                    var config = CreateDefaultConfiguration();
+
+                    // 保存默认配置到统一配置文件
                     await SaveUnifiedConfigurationAsync(config);
                     return config;
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not InvalidDataException)
             {
-                Console.WriteLine($"加载配置失败: {ex.Message}");
-                Console.WriteLine($"堆栈跟踪: {ex.StackTrace}");
+                System.Diagnostics.Debug.WriteLine($"加载配置失败: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"堆栈跟踪: {ex.StackTrace}");
                 return CreateDefaultConfiguration();
             }
             
@@ -171,60 +195,21 @@ namespace UTF.UI.Services
             return config;
         }
 
-        private async Task<UnifiedConfiguration> MergeFromSeparateConfigFilesAsync()
-        {
-            var unifiedConfig = new UnifiedConfiguration();
-            
-            // 尝试从现有的分散配置文件中加载数据
-            try
-            {
-                // 加载DUT配置
-                var dutConfigPath = Path.Combine(_configDirectory, "dut-config.json");
-                if (File.Exists(dutConfigPath))
-                {
-                    var dutContent = await File.ReadAllTextAsync(dutConfigPath);
-                    // 尝试直接解析为 JsonElement，然后手动映射
-                    using var dutDoc = JsonDocument.Parse(dutContent);
-                    // 这里可以添加更复杂的映射逻辑
-                }
-
-                // 加载仪器配置
-                var instrumentConfigPath = Path.Combine(_configDirectory, "instrument-config.json");
-                if (File.Exists(instrumentConfigPath))
-                {
-                    var instrumentContent = await File.ReadAllTextAsync(instrumentConfigPath);
-                    // 类似的处理
-                }
-
-                // 加载测试项目配置
-                var testProjectConfigPath = Path.Combine(_configDirectory, "test-project-config.json");
-                if (File.Exists(testProjectConfigPath))
-                {
-                    var testProjectContent = await File.ReadAllTextAsync(testProjectConfigPath);
-                    // 类似的处理
-                }
-
-                // 加载机器视觉配置
-                var visionConfigPath = Path.Combine(_configDirectory, "machine-vision-config.json");
-                if (File.Exists(visionConfigPath))
-                {
-                    var visionContent = await File.ReadAllTextAsync(visionConfigPath);
-                    // 类似的处理
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error merging separate config files: {ex.Message}");
-            }
-
-            return unifiedConfig;
-        }
-
         public async Task SaveUnifiedConfigurationAsync(UnifiedConfiguration config)
         {
+            ArgumentNullException.ThrowIfNull(config);
+            var errors = _configAdapter.ValidateConfigurationWithErrors(config);
+            if (errors.Count > 0)
+            {
+                throw new InvalidDataException($"配置校验失败: {string.Join("; ", errors)}");
+            }
+
+            await _fileLock.WaitAsync();
+            var temporaryPath = string.Empty;
             try
             {
                 var unifiedConfigPath = Path.Combine(_configDirectory, "unified-config.json");
+                temporaryPath = unifiedConfigPath + ".tmp";
                 var jsonContent = JsonSerializer.Serialize(config, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true,
@@ -232,7 +217,8 @@ namespace UTF.UI.Services
                     Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
                 });
 
-                await File.WriteAllTextAsync(unifiedConfigPath, jsonContent);
+                await File.WriteAllTextAsync(temporaryPath, jsonContent);
+                File.Move(temporaryPath, unifiedConfigPath, overwrite: true);
 
                 // 更新缓存系统
                 await _cache.SetAsync(UNIFIED_CONFIG_CACHE_KEY, config, ConfigCacheExpiration);
@@ -242,8 +228,16 @@ namespace UTF.UI.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving unified configuration: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Error saving unified configuration: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(temporaryPath) && File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+                _fileLock.Release();
             }
         }
 
@@ -278,7 +272,6 @@ namespace UTF.UI.Services
             if (config is UnifiedConfiguration unifiedConfig)
             {
                 await SaveUnifiedConfigurationAsync(unifiedConfig);
-                ConfigurationChanged?.Invoke(this, EventArgs.Empty);
             }
         }
 

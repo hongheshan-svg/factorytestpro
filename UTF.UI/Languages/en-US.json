@@ -17,7 +17,7 @@
       "Language": "Language",
       "DefaultAccount": "💡 Default Account Info",
       "DefaultUsername": "Username: admin",
-      "DefaultPassword": "Password: admin123",
+      "FirstRunPassword": "Create the administrator password on first run",
       "DefaultRole": "Role: Super Administrator"
     },
     "Main": {

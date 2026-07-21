@@ -52,10 +52,16 @@ public sealed class ScpiDriverPlugin : DeviceDriverPluginBase
 
     public override bool CanHandle(string stepType, string channel)
     {
-        var normalizedType = (stepType ?? string.Empty).Trim().ToLowerInvariant();
-        var normalizedChannel = (channel ?? string.Empty).Trim().ToLowerInvariant();
-        return normalizedType is "instrument" or "scpi" or "gpib" or "measure"
-            || normalizedChannel is "scpi" or "instrument" or "gpib" or "lxi";
+        // AND 语义：stepType 与 channel 必须同时匹配。
+        var supportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "instrument", "scpi", "gpib", "measure"
+        };
+        var supportedChannels = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "scpi", "instrument", "gpib", "lxi"
+        };
+        return DefaultCanHandle(stepType ?? string.Empty, channel ?? string.Empty, supportedTypes, supportedChannels);
     }
 
     protected override string ResolveEndpoint(StepExecutionRequest request)
@@ -84,7 +90,7 @@ public sealed class ScpiDriverPlugin : DeviceDriverPluginBase
             var port = parts.Length > 1 && int.TryParse(parts[1], out var p) ? p : _port;
 
             _client = new TcpClient();
-            await _client.ConnectAsync(host, port, ct);
+            await _client.ConnectAsync(host, port, ct).ConfigureAwait(false);
 
             _stream = _client.GetStream();
             _stream.ReadTimeout = _readTimeoutMs;
@@ -107,17 +113,17 @@ public sealed class ScpiDriverPlugin : DeviceDriverPluginBase
         }
 
         var commandBytes = _encoding.GetBytes(command + _lineEnding);
-        await _stream.WriteAsync(commandBytes, ct);
-        await _stream.FlushAsync(ct);
+        await _stream.WriteAsync(commandBytes, ct).ConfigureAwait(false);
+        await _stream.FlushAsync(ct).ConfigureAwait(false);
 
         // SCPI 查询命令以 ? 结尾，需要读取响应；设置命令无响应
         if (command.TrimEnd().EndsWith('?'))
         {
-            return await ReadScpiResponseAsync(ct);
+            return await ReadScpiResponseAsync(ct).ConfigureAwait(false);
         }
 
         // 对于设置命令，发送后短暂等待确保仪器处理
-        await Task.Delay(50, ct);
+        await Task.Delay(50, ct).ConfigureAwait(false);
         return "OK";
     }
 
@@ -142,7 +148,7 @@ public sealed class ScpiDriverPlugin : DeviceDriverPluginBase
         {
             try
             {
-                var bytesRead = await _stream!.ReadAsync(buffer, ct);
+                var bytesRead = await _stream!.ReadAsync(buffer, ct).ConfigureAwait(false);
                 if (bytesRead > 0)
                 {
                     var chunk = _encoding.GetString(buffer, 0, bytesRead);

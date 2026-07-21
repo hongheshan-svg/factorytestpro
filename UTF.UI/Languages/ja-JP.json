@@ -17,7 +17,7 @@
       "Language": "言語",
       "DefaultAccount": "💡 デフォルトアカウント情報",
       "DefaultUsername": "ユーザー名: admin",
-      "DefaultPassword": "パスワード: admin123",
+      "FirstRunPassword": "初回起動時に管理者パスワードを作成",
       "DefaultRole": "役割: スーパー管理者"
     },
     "Main": {

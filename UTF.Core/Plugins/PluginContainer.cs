@@ -34,22 +34,17 @@ public class PluginContainer : IPluginContainer
         return _plugins.Values.OfType<T>();
     }
 
-    public async Task<bool> HealthCheckAsync(string pluginId, CancellationToken ct = default)
+    /// <summary>
+    /// 健康检查 - 基于已注册的插件元数据判断。
+    /// 真正的活性探测应由插件自身实现（如 ping/握手）；此处仅校验插件已注册。
+    /// </summary>
+    public Task<bool> HealthCheckAsync(string pluginId, CancellationToken ct = default)
     {
         if (!_plugins.TryGetValue(pluginId, out var plugin))
-            return false;
+            return Task.FromResult(false);
 
-        try
-        {
-            if (plugin is IStepExecutorPlugin executor)
-                return executor.Metadata != null;
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.Error($"插件健康检查失败: {pluginId}", ex);
-            return false;
-        }
+        // 插件已注册即视为通过元数据层检查；真实健康检查由插件侧负责
+        return Task.FromResult(plugin.Metadata != null);
     }
 
     public IReadOnlyList<PluginMetadata> GetAllPlugins()

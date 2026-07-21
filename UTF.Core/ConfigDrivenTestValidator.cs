@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
+using UTF.Core.Validation;
 using UTF.Logging;
 
 namespace UTF.Core;
@@ -13,6 +14,33 @@ namespace UTF.Core;
 /// </summary>
 public sealed class ConfigDrivenTestValidator
 {
+    // 期望值/验证规则前缀（与 ExpectedResultMatcher 保持一致）
+    private const string PrefixContains = "contains:";
+    private const string PrefixNotContains = "notcontains:";
+    private const string PrefixEquals = "equals:";
+    private const string PrefixRegex = "regex:";
+
+    // 超时阈值（毫秒）
+    private const int MinTimeoutMs = 1000;
+    private const int MaxTimeoutMs = 60000;
+    private const int RecommendedMinTimeoutMs = 5000;
+    private const int RecommendedMaxTimeoutMs = 30000;
+
+    // 命令长度上限
+    private const int MaxCommandLength = 500;
+
+    // 步骤顺序间隔阈值
+    private const int StepOrderGapThreshold = 10;
+
+    /// <summary>用户提供的正则表达式匹配超时，防止 ReDoS。</summary>
+    private static readonly TimeSpan ValidationRegexTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>内部模板变量正则（编译 + 超时，避免长输入下的回溯爆炸）。</summary>
+    private static readonly Regex TemplateVariableRegex = new(
+        @"\{\{\s*([\w\.:\-]+)\s*\}\}|\$\{\s*([\w\.:\-]+)\s*\}",
+        RegexOptions.Compiled,
+        ValidationRegexTimeout);
+
     private readonly ILogger _logger;
 
     public ConfigDrivenTestValidator(ILogger? logger = null)
@@ -306,7 +334,7 @@ public sealed class ConfigDrivenTestValidator
         var sortedOrders = orders.OrderBy(o => o).ToList();
         for (int i = 1; i < sortedOrders.Count; i++)
         {
-            if (sortedOrders[i] - sortedOrders[i - 1] > 10)
+            if (sortedOrders[i] - sortedOrders[i - 1] > StepOrderGapThreshold)
             {
                 report.Warnings.Add(new ValidationWarning
                 {
@@ -361,27 +389,27 @@ public sealed class ConfigDrivenTestValidator
                     Code = "VAL_W008",
                     Message = $"步骤未设置超时或超时无效 (ID: {step.Id})",
                     StepId = step.Id,
-                    Suggestion = "建议设置合理的超时时间（5000-30000ms）"
+                    Suggestion = $"建议设置合理的超时时间（{RecommendedMinTimeoutMs}-{RecommendedMaxTimeoutMs}ms）"
                 });
             }
-            else if (step.Timeout.Value < 1000)
+            else if (step.Timeout.Value < MinTimeoutMs)
             {
                 report.Warnings.Add(new ValidationWarning
                 {
                     Code = "VAL_W009",
                     Message = $"步骤超时时间过短: {step.Timeout.Value}ms (ID: {step.Id})",
                     StepId = step.Id,
-                    Suggestion = "建议超时时间至少 1000ms"
+                    Suggestion = $"建议超时时间至少 {MinTimeoutMs}ms"
                 });
             }
-            else if (step.Timeout.Value > 60000)
+            else if (step.Timeout.Value > MaxTimeoutMs)
             {
                 report.Warnings.Add(new ValidationWarning
                 {
                     Code = "VAL_W010",
                     Message = $"步骤超时时间过长: {step.Timeout.Value}ms (ID: {step.Id})",
                     StepId = step.Id,
-                    Suggestion = "建议超时时间不超过 60000ms"
+                    Suggestion = $"建议超时时间不超过 {MaxTimeoutMs}ms"
                 });
             }
         }
@@ -426,7 +454,7 @@ public sealed class ConfigDrivenTestValidator
             }
 
             // 检查命令长度
-            if (step.Command.Length > 500)
+            if (step.Command.Length > MaxCommandLength)
             {
                 report.Warnings.Add(new ValidationWarning
                 {
@@ -440,7 +468,7 @@ public sealed class ConfigDrivenTestValidator
     }
 
     /// <summary>
-    /// 验证期望值格式
+    /// 验证期望值格式 - 校验所有支持的前缀（contains:/notcontains:/equals:/regex:）语法
     /// </summary>
     private void ValidateExpectedValues(ConfigTestProject project, ValidationReport report)
     {
@@ -463,25 +491,81 @@ public sealed class ConfigDrivenTestValidator
                 continue;
             }
 
-            // 验证正则表达式格式
-            if (step.Expected.StartsWith("regex:", StringComparison.OrdinalIgnoreCase))
+            var expected = step.Expected;
+            string? prefix = null;
+            string? body = null;
+
+            if (expected.StartsWith(PrefixContains, StringComparison.OrdinalIgnoreCase))
             {
-                var pattern = step.Expected.Substring("regex:".Length);
+                prefix = PrefixContains;
+                body = expected.Substring(PrefixContains.Length);
+            }
+            else if (expected.StartsWith(PrefixNotContains, StringComparison.OrdinalIgnoreCase))
+            {
+                prefix = PrefixNotContains;
+                body = expected.Substring(PrefixNotContains.Length);
+            }
+            else if (expected.StartsWith(PrefixEquals, StringComparison.OrdinalIgnoreCase))
+            {
+                prefix = PrefixEquals;
+                body = expected.Substring(PrefixEquals.Length);
+            }
+            else if (expected.StartsWith(PrefixRegex, StringComparison.OrdinalIgnoreCase))
+            {
+                prefix = PrefixRegex;
+                body = expected.Substring(PrefixRegex.Length);
+            }
+
+            // regex: 前缀需校验正则可编译性
+            if (prefix == PrefixRegex)
+            {
                 try
                 {
-                    _ = new Regex(pattern);
+                    _ = new Regex(body!, RegexOptions.None, ValidationRegexTimeout);
                 }
                 catch (ArgumentException)
                 {
                     report.Errors.Add(new ValidationError
                     {
                         Code = "VAL_020",
-                        Message = $"步骤期望值正则表达式无效: {pattern} (ID: {step.Id})",
+                        Message = $"步骤期望值正则表达式无效: {body} (ID: {step.Id})",
                         Severity = ErrorSeverity.High,
                         StepId = step.Id,
                         Suggestion = "请检查正则表达式语法"
                     });
+                    continue;
                 }
+            }
+
+            // contains:/notcontains:/equals: 前缀需有非空主体
+            if (prefix != null && prefix != PrefixRegex && string.IsNullOrWhiteSpace(body))
+            {
+                report.Errors.Add(new ValidationError
+                {
+                    Code = "VAL_021",
+                    Message = $"步骤期望值前缀 '{prefix}' 缺少比较内容 (ID: {step.Id})",
+                    Severity = ErrorSeverity.Medium,
+                    StepId = step.Id,
+                    Suggestion = $"格式应为 {prefix}<value>"
+                });
+                continue;
+            }
+
+            // 通过 ExpectedResultMatcher 做一次语法/匹配能力自检（空串实际值不应抛异常）
+            try
+            {
+                _ = ExpectedResultMatcher.Match(expected, string.Empty);
+            }
+            catch (Exception)
+            {
+                report.Errors.Add(new ValidationError
+                {
+                    Code = "VAL_022",
+                    Message = $"步骤期望值无法被解析: {expected} (ID: {step.Id})",
+                    Severity = ErrorSeverity.High,
+                    StepId = step.Id,
+                    Suggestion = "请检查期望值语法"
+                });
             }
         }
     }
@@ -496,7 +580,7 @@ public sealed class ConfigDrivenTestValidator
             return;
         }
 
-        var templateRegex = new Regex(@"\{\{\s*([\w\.:\-]+)\s*\}\}|\$\{\s*([\w\.:\-]+)\s*\}");
+        var templateRegex = TemplateVariableRegex;
         var sortedSteps = project.Steps.OrderBy(s => s.Order).ToList();
         var availableKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -814,7 +898,7 @@ public sealed class ConfigDrivenTestValidator
                 {
                     try
                     {
-                        _ = new Regex(pattern);
+                        _ = new Regex(pattern, RegexOptions.None, ValidationRegexTimeout);
                     }
                     catch (ArgumentException)
                     {

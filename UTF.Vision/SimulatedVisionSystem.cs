@@ -9,7 +9,8 @@ namespace UTF.Vision
     /// <summary>
     /// 模拟机器视觉系统
     /// </summary>
-    public class SimulatedVisionSystem : IVisionSystem
+    [Obsolete("Simulated vision system for development only. Use a real IVisionSystem implementation in production.")]
+    public class SimulatedVisionSystem : IVisionSystem, IAsyncDisposable
     {
         private readonly ILogger _logger;
         private readonly Random _random = new();
@@ -337,22 +338,51 @@ namespace UTF.Vision
         
         public void Dispose()
         {
+            // 同步释放采用 best-effort：在限时内等待异步断开完成，避免 .Wait() 死锁。
+            // 真正的资源清理走 DisposeAsync 路径。
             try
             {
                 if (_isConnected)
                 {
-                    DisconnectAsync().Wait(1000);
+                    // 同步等待异步断开完成，限时 2 秒以避免 .Wait() 无限等待的死锁风险。
+                    DisconnectAsync().Wait(TimeSpan.FromSeconds(2));
                 }
-                
+
                 // 释放算法管理器
                 _algorithmManager.Dispose();
-                
+
                 _logger.Info($"视觉系统已释放: {Name}");
             }
             catch (Exception ex)
             {
                 _logger.Error($"视觉系统释放异常: {Name}", ex);
             }
+        }
+
+        /// <summary>
+        /// 异步释放视觉系统资源。等待断开连接完成后再释放算法管理器，
+        /// 避免同步 .Wait() 造成的死锁风险。
+        /// </summary>
+        public async ValueTask DisposeAsync()
+        {
+            try
+            {
+                if (_isConnected)
+                {
+                    await DisconnectAsync().ConfigureAwait(false);
+                }
+
+                // 算法管理器当前只实现同步 IDisposable，这里仍走同步释放。
+                _algorithmManager.Dispose();
+
+                _logger.Info($"视觉系统已异步释放: {Name}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error($"视觉系统异步释放异常: {Name}", ex);
+            }
+
+            GC.SuppressFinalize(this);
         }
     }
 }

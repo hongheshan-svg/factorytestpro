@@ -214,25 +214,31 @@ public interface ILogWriter
 /// <summary>
 /// 日志记录器接口
 /// </summary>
-public interface ILogger
+public interface ILogger : IDisposable
 {
     /// <summary>记录调试信息</summary>
     void Debug(string message, string? source = null, Dictionary<string, object>? properties = null);
-    
+
     /// <summary>记录信息</summary>
     void Info(string message, string? source = null, Dictionary<string, object>? properties = null);
-    
+
     /// <summary>记录警告</summary>
     void Warning(string message, string? source = null, Dictionary<string, object>? properties = null);
-    
+
     /// <summary>记录错误</summary>
     void Error(string message, Exception? exception = null, string? source = null, Dictionary<string, object>? properties = null);
-    
+
     /// <summary>记录严重错误</summary>
     void Critical(string message, Exception? exception = null, string? source = null, Dictionary<string, object>? properties = null);
-    
-    /// <summary>记录自定义日志</summary>
+
+    /// <summary>记录自定义日志（带类别）</summary>
     void Log(LogLevel level, LogCategory category, string message, Exception? exception = null, string? source = null, Dictionary<string, object>? properties = null);
+
+    /// <summary>
+    /// 记录日志的简化重载。仅指定级别与消息，可选源与异常。
+    /// 默认类别为 <see cref="LogCategory.System"/>。
+    /// </summary>
+    void Log(LogLevel level, string message, string? source = null, Exception? exception = null);
     
     /// <summary>异步记录调试信息</summary>
     Task DebugAsync(string message, string? source = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default);

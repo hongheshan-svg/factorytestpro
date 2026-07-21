@@ -48,14 +48,16 @@ internal sealed record LoadedPlugin
     public required string AssemblyPath { get; init; }
 }
 
-public sealed class StepExecutorPluginHost : IDisposable
+public sealed class StepExecutorPluginHost : IDisposable, IAsyncDisposable
 {
     private readonly string _pluginRoot;
     private readonly ILogger? _logger;
+    // 所有写操作在 _initSemaphore 下进行；读操作（ExecuteAsync/HealthCheck）取快照，
+    // 避免在迭代期间被并发修改。使用 List 而非锁，依赖调用约定的串行初始化。
     private readonly List<LoadedPlugin> _loadedPlugins = new();
     private readonly SemaphoreSlim _initSemaphore = new(1, 1);
 
-    private bool _initialized;
+    private volatile bool _initialized;
     private bool _disposed;
 
     public StepExecutorPluginHost(string pluginRoot, ILogger? logger = null)
@@ -74,7 +76,7 @@ public sealed class StepExecutorPluginHost : IDisposable
     {
         ArgumentNullException.ThrowIfNull(pluginId);
 
-        await _initSemaphore.WaitAsync(cancellationToken);
+        await _initSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var plugin = _loadedPlugins.FirstOrDefault(
@@ -88,21 +90,14 @@ public sealed class StepExecutorPluginHost : IDisposable
 
             try
             {
-                await plugin.Instance.ShutdownAsync(cancellationToken);
+                await plugin.Instance.ShutdownAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 _logger?.Warning($"插件关闭异常: {pluginId}, {ex.Message}");
             }
 
-            try
-            {
-                plugin.LoadContext.Unload();
-            }
-            catch (Exception ex)
-            {
-                _logger?.Warning($"插件上下文卸载异常: {pluginId}, {ex.Message}");
-            }
+            UnloadContextBestEffort(plugin);
 
             _loadedPlugins.Remove(plugin);
             _logger?.Info($"插件已卸载: {pluginId}");
@@ -121,7 +116,7 @@ public sealed class StepExecutorPluginHost : IDisposable
     {
         ArgumentNullException.ThrowIfNull(pluginId);
 
-        await _initSemaphore.WaitAsync(cancellationToken);
+        await _initSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var issues = new List<PluginLoadIssue>();
@@ -132,7 +127,7 @@ public sealed class StepExecutorPluginHost : IDisposable
             if (existing != null)
             {
                 manifestPath = Path.Combine(Path.GetDirectoryName(existing.AssemblyPath)!, "plugin.manifest.json");
-                await UnloadPluginInternalAsync(existing, cancellationToken);
+                await UnloadPluginInternalAsync(existing, cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -154,7 +149,7 @@ public sealed class StepExecutorPluginHost : IDisposable
 
             try
             {
-                var loaded = await LoadPluginAsync(manifestPath, cancellationToken);
+                var loaded = await LoadPluginAsync(manifestPath, cancellationToken).ConfigureAwait(false);
                 _loadedPlugins.Add(loaded);
                 _logger?.Info($"插件重新加载成功: {loaded.Metadata.PluginId} {loaded.Metadata.Version}");
                 return new PluginLoadReport { LoadedCount = 1, FailedCount = 0, Issues = issues };
@@ -203,7 +198,7 @@ public sealed class StepExecutorPluginHost : IDisposable
             };
         }
 
-        await _initSemaphore.WaitAsync(cancellationToken);
+        await _initSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var issues = new List<PluginLoadIssue>();
@@ -237,12 +232,12 @@ public sealed class StepExecutorPluginHost : IDisposable
                     return new PluginLoadReport { LoadedCount = 0, FailedCount = 1, Issues = issues };
                 }
 
-                await UnloadPluginInternalAsync(existing, cancellationToken);
+                await UnloadPluginInternalAsync(existing, cancellationToken).ConfigureAwait(false);
             }
 
             try
             {
-                var loaded = await LoadPluginAsync(newManifestPath, cancellationToken);
+                var loaded = await LoadPluginAsync(newManifestPath, cancellationToken).ConfigureAwait(false);
                 _loadedPlugins.Add(loaded);
                 _logger?.Info($"插件升级成功: {pluginId} -> {loaded.Metadata.Version}");
                 return new PluginLoadReport { LoadedCount = 1, FailedCount = 0, Issues = issues };
@@ -271,7 +266,7 @@ public sealed class StepExecutorPluginHost : IDisposable
     public PluginHealthReport HealthCheck()
     {
         var entries = new List<PluginHealthEntry>();
-        foreach (var plugin in _loadedPlugins)
+        foreach (var plugin in _loadedPlugins.ToArray())
         {
             try
             {
@@ -313,21 +308,14 @@ public sealed class StepExecutorPluginHost : IDisposable
     {
         try
         {
-            await plugin.Instance.ShutdownAsync(cancellationToken);
+            await plugin.Instance.ShutdownAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger?.Warning($"插件关闭异常: {plugin.Metadata.PluginId}, {ex.Message}");
         }
 
-        try
-        {
-            plugin.LoadContext.Unload();
-        }
-        catch (Exception ex)
-        {
-            _logger?.Warning($"插件上下文卸载异常: {plugin.Metadata.PluginId}, {ex.Message}");
-        }
+        UnloadContextBestEffort(plugin);
 
         _loadedPlugins.Remove(plugin);
     }
@@ -336,26 +324,48 @@ public sealed class StepExecutorPluginHost : IDisposable
     {
         if (!Directory.Exists(_pluginRoot)) return null;
 
-        var manifests = Directory.GetFiles(_pluginRoot, "plugin.manifest.json", SearchOption.AllDirectories);
-        foreach (var path in manifests)
+        // 仅扫描 plugins/<id>/<version>/plugin.manifest.json 两层结构（非递归）。
+        foreach (var pluginIdDir in Directory.GetDirectories(_pluginRoot))
         {
-            try
+            foreach (var versionDir in Directory.GetDirectories(pluginIdDir))
             {
-                var manifest = ReadManifest(path);
-                if (string.Equals(manifest.PluginId, pluginId, StringComparison.OrdinalIgnoreCase))
+                var path = Path.Combine(versionDir, "plugin.manifest.json");
+                if (!File.Exists(path))
                 {
-                    return path;
+                    continue;
                 }
-            }
-            catch
-            {
-                // 跳过无效清单
+
+                try
+                {
+                    var manifest = ReadManifest(path);
+                    if (string.Equals(manifest.PluginId, pluginId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return path;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // 跳过无效清单，但记录警告（ILogger 可用时走日志，否则用 Debug.WriteLine）
+                    var message = $"FindManifestByPluginId: 跳过无效清单 {path}: {ex.Message}";
+                    if (_logger != null)
+                    {
+                        _logger.Warning(message);
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine(message);
+                    }
+                }
             }
         }
 
         return null;
     }
 
+    // TODO(SemVer): Version.TryParse 仅支持 Major.Minor[.Build[.Revision]] 形式，
+    // 不识别预发布标签（如 1.0.0-beta）或 SemVer 2.0 的 build 元数据。
+    // 升级时应切换到 NuGet.Versioning.SemanticVersion 以获得完整 SemVer 支持，
+    // 但为避免引入新 NuGet 依赖，暂保留 Version.TryParse。当前会回退到字符串比较。
     private static int CompareVersions(string versionA, string versionB)
     {
         if (Version.TryParse(versionA, out var a) && Version.TryParse(versionB, out var b))
@@ -368,7 +378,7 @@ public sealed class StepExecutorPluginHost : IDisposable
 
     public async Task<PluginLoadReport> InitializeAsync(CancellationToken cancellationToken = default)
     {
-        await _initSemaphore.WaitAsync(cancellationToken);
+        await _initSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             if (_initialized)
@@ -392,34 +402,44 @@ public sealed class StepExecutorPluginHost : IDisposable
                 };
             }
 
-            var manifestPaths = Directory.GetFiles(_pluginRoot, "plugin.manifest.json", SearchOption.AllDirectories);
-            foreach (var manifestPath in manifestPaths)
+            // 插件必须位于 plugins/<id>/<version>/plugin.manifest.json。递归扫描已改为
+            // 仅扫描两层已知结构（<id> 目录及其下 <version> 目录），避免任意深度的遍历。
+            foreach (var pluginIdDir in Directory.GetDirectories(_pluginRoot))
             {
-                try
+                foreach (var versionDir in Directory.GetDirectories(pluginIdDir))
                 {
-                    var loadedPlugin = await LoadPluginAsync(manifestPath, cancellationToken);
-                    _loadedPlugins.Add(loadedPlugin);
-                    _logger?.Info($"插件加载成功: {loadedPlugin.Metadata.PluginId} {loadedPlugin.Metadata.Version}");
-                }
-                catch (PluginLoadException ex)
-                {
-                    issues.Add(new PluginLoadIssue
+                    var manifestPath = Path.Combine(versionDir, "plugin.manifest.json");
+                    if (!File.Exists(manifestPath))
                     {
-                        ManifestPath = manifestPath,
-                        ErrorCode = ex.ErrorCode,
-                        Message = ex.Message
-                    });
-                    _logger?.Warning($"插件加载失败 [{ex.ErrorCode}]: {manifestPath} - {ex.Message}");
-                }
-                catch (Exception ex)
-                {
-                    issues.Add(new PluginLoadIssue
+                        continue;
+                    }
+
+                    try
                     {
-                        ManifestPath = manifestPath,
-                        ErrorCode = PluginErrorCodes.InitializeFailed,
-                        Message = ex.Message
-                    });
-                    _logger?.Error($"插件加载异常: {manifestPath}", ex);
+                        var loadedPlugin = await LoadPluginAsync(manifestPath, cancellationToken).ConfigureAwait(false);
+                        _loadedPlugins.Add(loadedPlugin);
+                        _logger?.Info($"插件加载成功: {loadedPlugin.Metadata.PluginId} {loadedPlugin.Metadata.Version}");
+                    }
+                    catch (PluginLoadException ex)
+                    {
+                        issues.Add(new PluginLoadIssue
+                        {
+                            ManifestPath = manifestPath,
+                            ErrorCode = ex.ErrorCode,
+                            Message = ex.Message
+                        });
+                        _logger?.Warning($"插件加载失败 [{ex.ErrorCode}]: {manifestPath} - {ex.Message}");
+                    }
+                    catch (Exception ex)
+                    {
+                        issues.Add(new PluginLoadIssue
+                        {
+                            ManifestPath = manifestPath,
+                            ErrorCode = PluginErrorCodes.InitializeFailed,
+                            Message = ex.Message
+                        });
+                        _logger?.Error($"插件加载异常: {manifestPath}", ex);
+                    }
                 }
             }
 
@@ -441,10 +461,12 @@ public sealed class StepExecutorPluginHost : IDisposable
     {
         if (!_initialized)
         {
-            await InitializeAsync(cancellationToken);
+            await InitializeAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        var matches = _loadedPlugins
+        // 取快照再迭代，避免与并发 UnloadPluginAsync/Reload 产生的列表修改冲突。
+        var snapshot = _loadedPlugins.ToArray();
+        var matches = snapshot
             .Where(p => p.Instance.CanHandle(request.StepType, request.Channel))
             .OrderBy(p => p.Metadata.Priority)
             .ThenBy(p => p.Metadata.PluginId, StringComparer.OrdinalIgnoreCase)
@@ -484,8 +506,12 @@ public sealed class StepExecutorPluginHost : IDisposable
 
         try
         {
-            var result = await selected.Instance.ExecuteAsync(request, timeoutCts.Token);
+            var result = await selected.Instance.ExecuteAsync(request, timeoutCts.Token).ConfigureAwait(false);
             return NormalizeResult(result, selected.Metadata, startedAt);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -518,7 +544,13 @@ public sealed class StepExecutorPluginHost : IDisposable
     private async Task<LoadedPlugin> LoadPluginAsync(string manifestPath, CancellationToken cancellationToken)
     {
         var manifest = ReadManifest(manifestPath);
-        ValidateManifest(manifest, manifestPath);
+        var validationIssues = ValidateManifest(manifest, manifestPath);
+        if (validationIssues.Count > 0)
+        {
+            throw new PluginLoadException(
+                PluginErrorCodes.ManifestInvalid,
+                $"插件清单校验失败 ({manifestPath}): {string.Join("; ", validationIssues)}");
+        }
 
         if (!string.Equals(manifest.PluginApiVersion, PluginApiVersions.V1, StringComparison.OrdinalIgnoreCase))
         {
@@ -530,6 +562,17 @@ public sealed class StepExecutorPluginHost : IDisposable
         var manifestDirectory = Path.GetDirectoryName(manifestPath)
             ?? throw new PluginLoadException(PluginErrorCodes.ManifestInvalid, "插件清单路径无效。");
         var assemblyPath = Path.GetFullPath(Path.Combine(manifestDirectory, manifest.EntryAssembly));
+
+        // PLG001: 防止 EntryAssembly 路径逃逸出清单目录（路径遍历攻击）
+        var normalizedManifestDir = Path.GetFullPath(manifestDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!assemblyPath.StartsWith(normalizedManifestDir, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new PluginLoadException(
+                PluginErrorCodes.ManifestInvalid,
+                "PLG001: EntryAssembly path escapes manifest directory");
+        }
+
         if (!File.Exists(assemblyPath))
         {
             throw new PluginLoadException(
@@ -537,7 +580,23 @@ public sealed class StepExecutorPluginHost : IDisposable
                 $"入口程序集不存在: {assemblyPath}");
         }
 
-        if (!string.IsNullOrWhiteSpace(manifest.Sha256))
+        // PLG002: SHA-256 强制校验。若未提供哈希，默认拒绝加载；除非显式设置
+        // 环境变量 UTFF_ALLOW_UNSIGNED_PLUGINS=1（仅供测试/开发场景），此时记录
+        // 严重警告但仍允许加载，不计算哈希。
+        if (string.IsNullOrWhiteSpace(manifest.Sha256))
+        {
+            var allowUnsigned = IsUnsignedPluginsAllowed();
+            if (!allowUnsigned)
+            {
+                throw new PluginLoadException(
+                    PluginErrorCodes.IntegrityCheckFailed,
+                    "PLG002: manifest sha256 is required");
+            }
+
+            _logger?.Critical(
+                $"PLG002: 插件 '{manifest.PluginId}' 未提供 SHA-256 哈希，已因 UTFF_ALLOW_UNSIGNED_PLUGINS 环境变量放行（仅限测试/开发场景）。");
+        }
+        else
         {
             VerifySha256OrThrow(assemblyPath, manifest.Sha256);
         }
@@ -567,7 +626,7 @@ public sealed class StepExecutorPluginHost : IDisposable
                 Settings = manifest.Settings
             };
 
-            await pluginInstance.InitializeAsync(initContext, cancellationToken);
+            await pluginInstance.InitializeAsync(initContext, cancellationToken).ConfigureAwait(false);
             var metadata = MergeMetadata(pluginInstance.Metadata, manifest);
 
             return new LoadedPlugin
@@ -642,26 +701,59 @@ public sealed class StepExecutorPluginHost : IDisposable
         }
     }
 
-    private static void ValidateManifest(PluginManifest manifest, string manifestPath)
+    private static IReadOnlyList<string> ValidateManifest(PluginManifest manifest, string manifestPath)
     {
-        if (string.IsNullOrWhiteSpace(manifest.PluginId) ||
-            string.IsNullOrWhiteSpace(manifest.EntryAssembly) ||
-            string.IsNullOrWhiteSpace(manifest.EntryType) ||
-            string.IsNullOrWhiteSpace(manifest.PluginApiVersion))
+        var issues = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(manifest.PluginId))
         {
-            throw new PluginLoadException(
-                PluginErrorCodes.ManifestInvalid,
-                $"插件清单缺少必填字段: {manifestPath}");
+            issues.Add("PluginId 缺失");
         }
+
+        if (string.IsNullOrWhiteSpace(manifest.EntryAssembly))
+        {
+            issues.Add("EntryAssembly 缺失");
+        }
+
+        // EntryType 必须是非空、完全限定的类型名 (Namespace.TypeName)
+        var entryType = manifest.EntryType?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(entryType))
+        {
+            issues.Add("EntryType 缺失");
+        }
+        else if (!entryType.Contains('.', StringComparison.Ordinal))
+        {
+            issues.Add($"EntryType '{entryType}' 不是完全限定类型名 (应包含命名空间)");
+        }
+
+        if (string.IsNullOrWhiteSpace(manifest.PluginApiVersion))
+        {
+            issues.Add("PluginApiVersion 缺失");
+        }
+
+        // Version 校验：暂用 Version.TryParse（TODO 升级为 SemVer，见 CompareVersions 注释）
+        if (string.IsNullOrWhiteSpace(manifest.Version) ||
+            !Version.TryParse(manifest.Version.Trim(), out _))
+        {
+            issues.Add($"Version '{manifest.Version}' 不是有效版本号 (Major.Minor[.Build[.Revision]])");
+        }
+
+        // Priority 数值越小优先级越高；允许任意非负整数（测试夹具与生产均可使用如 10/200 的值）
+        if (manifest.Priority < 0)
+        {
+            issues.Add($"Priority {manifest.Priority} 不能为负数");
+        }
+
+        return issues;
     }
 
     private static void VerifySha256OrThrow(string assemblyPath, string expectedSha256)
     {
-        var normalizedExpected = expectedSha256.Trim().ToLowerInvariant();
+        var normalizedExpected = expectedSha256.Trim();
         using var stream = File.OpenRead(assemblyPath);
         using var sha = SHA256.Create();
         var hash = sha.ComputeHash(stream);
-        var actual = Convert.ToHexString(hash).ToLowerInvariant();
+        var actual = Convert.ToHexString(hash);
         if (!string.Equals(actual, normalizedExpected, StringComparison.OrdinalIgnoreCase))
         {
             throw new PluginLoadException(
@@ -670,6 +762,96 @@ public sealed class StepExecutorPluginHost : IDisposable
         }
     }
 
+    /// <summary>
+    /// 是否允许加载未签名（无 SHA-256）的插件。
+    /// 仅当环境变量 UTFF_ALLOW_UNSIGNED_PLUGINS 设置为 "1"/"true" 时返回 true，
+    /// 仅供测试与本地开发使用，生产环境应始终返回 false。
+    /// </summary>
+    private static bool IsUnsignedPluginsAllowed()
+    {
+        var value = Environment.GetEnvironmentVariable("UTFF_ALLOW_UNSIGNED_PLUGINS");
+        return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 卸载插件的 AssemblyLoadContext（best-effort）。Unload 是异步的，此处最多自旋等待 1 秒
+    /// 以便上下文有较高概率被回收；调用方在此后不应再复用该上下文。超时即放弃，不抛异常。
+    /// </summary>
+    private void UnloadContextBestEffort(LoadedPlugin plugin)
+    {
+        try
+        {
+            plugin.LoadContext.Unload();
+        }
+        catch (Exception ex)
+        {
+            _logger?.Warning($"插件上下文卸载异常: {plugin.Metadata.PluginId}, {ex.Message}");
+            return;
+        }
+
+        // 有限自旋等待上下文回收（最长 1 秒），帮助检测卸载是否真正完成。
+        var weakRef = plugin.LoadContext.SelfReference;
+        var deadline = DateTime.UtcNow.AddSeconds(1);
+        while (DateTime.UtcNow < deadline)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            if (!weakRef.TryGetTarget(out _))
+            {
+                break;
+            }
+
+            Thread.Sleep(50);
+        }
+    }
+
+    /// <summary>
+    /// 异步释放：为每个插件最多等待 5 秒的 ShutdownAsync，超时则放弃。
+    /// 优先使用此方法以避免同步阻塞 (sync-over-async)。
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var snapshot = _loadedPlugins.ToArray();
+        foreach (var plugin in snapshot)
+        {
+            try
+            {
+                // 最多等待 5 秒；超时则放弃该插件关闭，避免永久阻塞宿主释放。
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                var shutdownTask = plugin.Instance.ShutdownAsync(cts.Token);
+                var delayTask = Task.Delay(TimeSpan.FromSeconds(5), CancellationToken.None);
+                var completed = await Task.WhenAny(shutdownTask, delayTask).ConfigureAwait(false);
+
+                if (completed != shutdownTask)
+                {
+                    _logger?.Warning($"插件关闭超时(>5s)，已放弃: {plugin.Metadata.PluginId}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning($"插件关闭异常: {plugin.Metadata.PluginId}, {ex.Message}");
+            }
+
+            UnloadContextBestEffort(plugin);
+        }
+
+        _loadedPlugins.Clear();
+        _initSemaphore.Dispose();
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// 同步释放：不调用异步 Shutdown（避免 sync-over-async 死锁），仅标记已释放、
+    /// 记录被放弃的插件，并尽力卸载各插件的 AssemblyLoadContext。
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -677,16 +859,11 @@ public sealed class StepExecutorPluginHost : IDisposable
             return;
         }
 
-        foreach (var plugin in _loadedPlugins)
+        foreach (var plugin in _loadedPlugins.ToArray())
         {
-            try
-            {
-                plugin.Instance.ShutdownAsync(CancellationToken.None).GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-                _logger?.Warning($"插件关闭异常: {plugin.Metadata.PluginId}, {ex.Message}");
-            }
+            // 不调用 ShutdownAsync().GetAwaiter().GetResult()（会导致 sync-over-async 死锁）。
+            // 仅记录未优雅关闭的插件，由 DisposeAsync 或终结器处理。
+            _logger?.Warning($"插件未通过异步路径优雅关闭，已标记放弃: {plugin.Metadata.PluginId}");
 
             try
             {

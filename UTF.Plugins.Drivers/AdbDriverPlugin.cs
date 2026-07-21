@@ -37,10 +37,16 @@ public sealed class AdbDriverPlugin : DeviceDriverPluginBase
 
     public override bool CanHandle(string stepType, string channel)
     {
-        var normalizedType = (stepType ?? string.Empty).Trim().ToLowerInvariant();
-        var normalizedChannel = (channel ?? string.Empty).Trim().ToLowerInvariant();
-        return normalizedType is "adb" or "android" or "shell"
-            || normalizedChannel is "adb" or "android" or "usb";
+        // AND 语义：stepType 与 channel 必须同时匹配。
+        var supportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "adb", "android", "shell"
+        };
+        var supportedChannels = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "adb", "android", "usb"
+        };
+        return DefaultCanHandle(stepType ?? string.Empty, channel ?? string.Empty, supportedTypes, supportedChannels);
     }
 
     protected override string ResolveEndpoint(StepExecutionRequest request)
@@ -63,15 +69,16 @@ public sealed class AdbDriverPlugin : DeviceDriverPluginBase
     {
         _currentDeviceSerial = endpoint;
 
-        // 如果是 IP:Port 形式，需要先执行 adb connect
-        if (endpoint.Contains(':') || endpoint.Contains('.'))
+        // 判断是否为网络端点（host:port 或 IP），需要先执行 adb connect；
+        // 否则视为 USB 设备序列号。用 Uri/正则判断取代宽松的 Contains(':')/Contains('.')。
+        if (IsNetworkEndpoint(endpoint))
         {
-            var result = await RunAdbCommandAsync($"connect {endpoint}", ct);
+            var result = await RunAdbCommandAsync(new[] { "connect", endpoint }, ct).ConfigureAwait(false);
             return result.Contains("connected", StringComparison.OrdinalIgnoreCase);
         }
 
         // USB 连接的设备，验证设备是否在线
-        var devices = await RunAdbCommandAsync("devices", ct);
+        var devices = await RunAdbCommandAsync(new[] { "devices" }, ct).ConfigureAwait(false);
         return devices.Contains(endpoint, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -86,53 +93,95 @@ public sealed class AdbDriverPlugin : DeviceDriverPluginBase
             var adbArgs = trimmedCommand.Substring(4).Trim();
             if (!string.IsNullOrWhiteSpace(_currentDeviceSerial))
             {
-                return await RunAdbCommandAsync($"-s {_currentDeviceSerial} {adbArgs}", ct);
+                return await RunAdbCommandAsync(new[] { "-s", _currentDeviceSerial, adbArgs }, ct).ConfigureAwait(false);
             }
 
-            return await RunAdbCommandAsync(adbArgs, ct);
+            return await RunAdbCommandAsync(new[] { adbArgs }, ct).ConfigureAwait(false);
         }
 
         // 默认包装为 adb shell 命令
         if (!string.IsNullOrWhiteSpace(_currentDeviceSerial))
         {
-            return await RunAdbCommandAsync($"-s {_currentDeviceSerial} shell {trimmedCommand}", ct);
+            return await RunAdbCommandAsync(new[] { "-s", _currentDeviceSerial, "shell", trimmedCommand }, ct).ConfigureAwait(false);
         }
 
-        return await RunAdbCommandAsync($"shell {trimmedCommand}", ct);
+        return await RunAdbCommandAsync(new[] { "shell", trimmedCommand }, ct).ConfigureAwait(false);
     }
 
     protected override async Task DisconnectCoreAsync(CancellationToken ct)
     {
-        if (_currentDeviceSerial.Contains(':') || _currentDeviceSerial.Contains('.'))
+        if (IsNetworkEndpoint(_currentDeviceSerial))
         {
-            await RunAdbCommandAsync($"disconnect {_currentDeviceSerial}", ct);
+            await RunAdbCommandAsync(new[] { "disconnect", _currentDeviceSerial }, ct).ConfigureAwait(false);
         }
 
         _currentDeviceSerial = string.Empty;
     }
 
-    private async Task<string> RunAdbCommandAsync(string arguments, CancellationToken ct)
+    /// <summary>
+    /// 判断端点是否为网络形式（host:port 或点分 IPv4/IPv6/主机名），
+    /// 用于区分需要 adb connect 的网络设备与 USB 序列号。
+    /// </summary>
+    private static bool IsNetworkEndpoint(string endpoint)
     {
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            return false;
+        }
+
+        // host:port 形式（host 不含冒号，port 为数字）
+        var hostPortMatch = System.Text.RegularExpressions.Regex.Match(
+            endpoint, @"^[^:/]+:\d+$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        if (hostPortMatch.Success)
+        {
+            return true;
+        }
+
+        // 纯点分 IPv4 / 含点的主机名（USB 序列号通常不含点与冒号）
+        if (endpoint.Contains('.') && Uri.TryCreate($"tcp://{endpoint}", UriKind.Absolute, out _))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task<string> RunAdbCommandAsync(IReadOnlyList<string> args, CancellationToken ct)
+    {
+        // 使用 ArgumentList 逐参数添加而非拼接字符串赋值给 Arguments，
+        // 以避免因设备序列号/命令文本中混入特殊字符而导致的参数注入。
         var startInfo = new ProcessStartInfo
         {
             FileName = _adbPath,
-            Arguments = arguments,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
 
+        foreach (var arg in args)
+        {
+            startInfo.ArgumentList.Add(arg);
+        }
+
         using var process = new Process { StartInfo = startInfo };
         if (!process.Start())
         {
-            throw new InvalidOperationException($"启动 ADB 进程失败: {_adbPath} {arguments}");
+            throw new InvalidOperationException($"启动 ADB 进程失败: {_adbPath} {string.Join(' ', args)}");
         }
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
         var stderrTask = process.StandardError.ReadToEndAsync(ct);
 
-        await process.WaitForExitAsync(ct);
+        try
+        {
+            await process.WaitForExitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            TryKillProcessTree(process);
+            throw;
+        }
 
         var stdout = await stdoutTask;
         var stderr = await stderrTask;
@@ -143,5 +192,21 @@ public sealed class AdbDriverPlugin : DeviceDriverPluginBase
         }
 
         return $"{stdout}{Environment.NewLine}{stderr}".Trim();
+    }
+
+    private static void TryKillProcessTree(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(2000);
+            }
+        }
+        catch
+        {
+            // Cancellation must still propagate even if the OS refuses termination.
+        }
     }
 }

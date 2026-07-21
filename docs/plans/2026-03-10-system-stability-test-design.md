@@ -1,5 +1,7 @@
 # 2026-03-10 系统稳定性测试设计
 
+> **Status: historical.** `OptimizedTestEngine.cs` has been deleted; current concurrency entry point is `ConfigDrivenTestEngine.cs` (`ConfigDrivenTestEngine.ExecuteStepAsync`) coordinated by `ConfigDrivenTestOrchestrator`. 本设计中引用 `UTF.Core/OptimizedTestEngine.cs` 的章节仅作为历史背景保留。
+
 ## 目标
 
 本设计面向当前 `UniversalTestFramework.sln` 的整体系统稳定性验证，目标不是单次功能通过，而是回答以下问题：

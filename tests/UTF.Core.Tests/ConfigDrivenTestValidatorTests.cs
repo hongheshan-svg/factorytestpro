@@ -30,7 +30,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
 
     #region ValidateBasicInfo
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_EmptyId_ReportsError()
     {
         var project = CreateMinimalProject();
@@ -42,7 +42,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
         Assert.Contains(report.Errors, e => e.Code == "VAL_001");
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_EmptyName_ReportsError()
     {
         var project = CreateMinimalProject();
@@ -54,7 +54,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
         Assert.Contains(report.Errors, e => e.Code == "VAL_003");
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_ValidProject_PassesValidation()
     {
         var project = CreateMinimalProject();
@@ -73,7 +73,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
 
     #region ValidateSteps
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_NullSteps_ReportsError()
     {
         var project = CreateMinimalProject();
@@ -85,7 +85,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
         Assert.Contains(report.Errors, e => e.Code == "VAL_010");
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_EmptyStepId_ReportsError()
     {
         var project = CreateMinimalProject();
@@ -99,7 +99,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
         Assert.Contains(report.Errors, e => e.Message.Contains("ID"));
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_InvalidStepType_ReportsWarning()
     {
         var project = CreateMinimalProject();
@@ -113,7 +113,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
         Assert.Contains(report.Warnings, w => w.Code == "VAL_W003");
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_DuplicateStepIds_ReportsError()
     {
         var project = CreateMinimalProject();
@@ -132,7 +132,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
 
     #region ValidateExpectedValues
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_InvalidRegexExpected_ReportsError()
     {
         var project = CreateMinimalProject();
@@ -146,7 +146,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
         Assert.Contains(report.Errors, e => e.Code == "VAL_020");
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_ValidRegexExpected_NoError()
     {
         var project = CreateMinimalProject();
@@ -164,7 +164,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
 
     #region ValidateVariableTemplates
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_UndefinedVariable_ReportsError()
     {
         var project = CreateMinimalProject();
@@ -178,7 +178,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
         Assert.Contains(report.Errors, e => e.Code == "VAL_030");
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_DefinedVariable_NoError()
     {
         var project = CreateMinimalProject();
@@ -193,7 +193,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
         Assert.DoesNotContain(report.Errors, e => e.Code == "VAL_030");
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_VariableUsedBeforeProduced_ReportsError()
     {
         var project = CreateMinimalProject();
@@ -212,7 +212,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
 
     #region ValidateConditionExpressions
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_ValidExistsCondition_NoError()
     {
         var project = CreateMinimalProject();
@@ -227,7 +227,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
         Assert.DoesNotContain(report.Errors, e => e.Code == "VAL_031" || e.Code == "VAL_033");
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_InvalidConditionPrefix_ReportsError()
     {
         var project = CreateMinimalProject();
@@ -241,7 +241,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
         Assert.Contains(report.Errors, e => e.Code == "VAL_033");
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_EmptyExistsCondition_ReportsError()
     {
         var project = CreateMinimalProject();
@@ -259,7 +259,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
 
     #region ValidateStoreResultDependencies
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_DuplicateStoreResultAs_ReportsWarning()
     {
         var project = CreateMinimalProject();
@@ -278,7 +278,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
 
     #region ValidateValidationRules
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_NumericRangeMinGreaterThanMax_ReportsError()
     {
         var project = CreateMinimalProject();
@@ -303,7 +303,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
 
     #region ValidateChannelTypeConsistency
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_MismatchedTypeAndChannel_ReportsWarning()
     {
         var project = CreateMinimalProject();
@@ -317,7 +317,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
         Assert.Contains(report.Warnings, w => w.Code == "VAL_W040");
     }
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void ValidateTestProject_MatchedTypeAndChannel_NoWarning()
     {
         var project = CreateMinimalProject();
@@ -335,7 +335,7 @@ public class ConfigDrivenTestValidatorTests : IDisposable
 
     #region GenerateReportSummary
 
-    [Fact]
+    [Fact][Trait("Category","Unit")]
     public void GenerateReportSummary_ValidReport_ContainsExpectedSections()
     {
         var project = CreateMinimalProject();

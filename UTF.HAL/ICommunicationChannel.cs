@@ -8,6 +8,7 @@ namespace UTF.HAL;
 /// <summary>
 /// 通信通道接口 - 支持任意通信协议的可插拔抽象
 /// </summary>
+[Obsolete("Device abstraction is superseded by the plugin-based driver stack (UTF.Plugins.Drivers). Will be removed in a future version.")]
 public interface ICommunicationChannel : IDisposable
 {
     /// <summary>通道名称（如 Serial, Network, CAN, I2C）</summary>

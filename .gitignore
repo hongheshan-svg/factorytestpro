@@ -11,6 +11,8 @@ obj/
 *.cache
 *.pdb
 rememberme.json
+Data/users.json
+UTF.UI/Data/users.json
 TestResults/
 UTF.UI/bin/
 UTF.Business/bin/

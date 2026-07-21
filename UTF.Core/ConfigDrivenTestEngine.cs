@@ -16,7 +16,7 @@ namespace UTF.Core;
 /// <summary>
 /// 配置驱动的测试执行引擎 - 支持灵活的测试步骤配置和插件系统
 /// </summary>
-public sealed class ConfigDrivenTestEngine : IDisposable
+public sealed class ConfigDrivenTestEngine : IStepExecutionService, IDisposable
 {
     private static readonly Regex TemplateRegex = new(@"\{\{\s*([\w\.:\-]+)\s*\}\}|\$\{\s*([\w\.:\-]+)\s*\}", RegexOptions.Compiled);
     private static readonly Regex FirstNumberRegex = new(@"[-+]?\d*\.?\d+", RegexOptions.Compiled);
@@ -25,18 +25,21 @@ public sealed class ConfigDrivenTestEngine : IDisposable
     private readonly IPluginService? _pluginService;
     private readonly IEventBus? _eventBus;
     private readonly ITestResultRepository? _resultRepository;
+    private readonly IRetryPolicy? _retryPolicy;
     private bool _disposed;
 
     public ConfigDrivenTestEngine(
         ILogger? logger = null,
         IPluginService? pluginService = null,
         IEventBus? eventBus = null,
-        ITestResultRepository? resultRepository = null)
+        ITestResultRepository? resultRepository = null,
+        IRetryPolicy? retryPolicy = null)
     {
         _logger = logger ?? LoggerFactory.CreateLogger<ConfigDrivenTestEngine>();
         _pluginService = pluginService;
         _eventBus = eventBus;
         _resultRepository = resultRepository;
+        _retryPolicy = retryPolicy;
     }
 
     /// <summary>
@@ -88,8 +91,10 @@ public sealed class ConfigDrivenTestEngine : IDisposable
                 await Task.Delay(stepConfig.Delay.Value, cancellationToken);
             }
 
-            // 重试逻辑
-            var maxRetries = ResolveMaxAttempts(stepConfig);
+            // 重试逻辑：若注入了 IRetryPolicy，则由策略决定最大尝试次数（优先于步骤配置）；
+            // 否则回退到步骤配置的 RetryCount。正常失败路径与异常路径都咨询 ShouldRetry。
+            var maxRetries = _retryPolicy?.MaxAttempts ?? ResolveMaxAttempts(stepConfig);
+            var retryPolicyDelay = _retryPolicy is not null;
 
             for (int retry = 0; retry < maxRetries; retry++)
             {
@@ -134,9 +139,25 @@ public sealed class ConfigDrivenTestEngine : IDisposable
                     }
                     else if (retry < maxRetries - 1)
                     {
+                        // 正常失败路径：若注入策略，咨询 ShouldRetry（异常为 null 表示非异常失败）。
+                        if (retryPolicyDelay && !_retryPolicy!.ShouldRetry(retry + 1, null))
+                        {
+                            _logger.Warning($"步骤失败且重试策略拒绝继续重试 ({retry + 1}/{maxRetries}): {stepConfig.Name}");
+                            break;
+                        }
+
                         _logger.Warning($"步骤失败,准备重试 ({retry + 1}/{maxRetries}): {stepConfig.Name}");
-                        await Task.Delay(1000, cancellationToken);
+                        var delay = retryPolicyDelay ? _retryPolicy!.GetNextDelay(retry) : TimeSpan.FromSeconds(1);
+                        await Task.Delay(delay, cancellationToken);
                     }
+                }
+                catch (OperationCanceledException)
+                {
+                    // 取消时返回失败结果而非抛出 - 保持与历史测试契约一致
+                    result.Passed = false;
+                    result.ErrorMessage = "步骤执行已取消";
+                    result.EndTime = DateTime.UtcNow;
+                    return result;
                 }
                 catch (Exception ex)
                 {
@@ -144,6 +165,13 @@ public sealed class ConfigDrivenTestEngine : IDisposable
                     _logger.Error($"步骤执行异常: {stepConfig.Name}", ex);
 
                     if (retry >= maxRetries - 1)
+                    {
+                        result.Passed = false;
+                        break;
+                    }
+
+                    // 异常路径：若注入策略，咨询 ShouldRetry 决定是否继续。
+                    if (retryPolicyDelay && !_retryPolicy!.ShouldRetry(retry + 1, ex))
                     {
                         result.Passed = false;
                         break;
@@ -739,6 +767,32 @@ public sealed class ConfigDrivenTestEngine : IDisposable
 
         return double.TryParse(minText, NumberStyles.Float, CultureInfo.InvariantCulture, out min)
             && double.TryParse(maxText, NumberStyles.Float, CultureInfo.InvariantCulture, out max);
+    }
+
+    /// <summary>
+    /// IStepExecutionService 实现：适配 <see cref="CoreStepExecutionRequest"/> 到内部
+    /// <see cref="ConfigTestStep"/> 路径，委托给既有 <see cref="ExecuteStepAsync(ConfigTestStep, string, Dictionary{string, object?}?, CancellationToken)"/>。
+    /// </summary>
+    public async Task<CoreStepExecutionResult> ExecuteStepAsync(CoreStepExecutionRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request is null) throw new ArgumentNullException(nameof(request));
+
+        var stepResult = await ExecuteStepAsync(request.Step, request.DutId, request.Context, cancellationToken).ConfigureAwait(false);
+
+        return new CoreStepExecutionResult
+        {
+            StepId = stepResult.StepId,
+            StepName = stepResult.StepName,
+            Passed = stepResult.Passed,
+            Skipped = stepResult.Skipped,
+            RawOutput = stepResult.RawOutput ?? string.Empty,
+            MeasuredValue = stepResult.MeasuredValue ?? string.Empty,
+            ExpectedValue = stepResult.ExpectedValue ?? string.Empty,
+            ErrorMessage = stepResult.ErrorMessage ?? string.Empty,
+            StartTime = stepResult.StartTime,
+            EndTime = stepResult.EndTime,
+            RetryCount = stepResult.RetryCount
+        };
     }
 
     /// <summary>

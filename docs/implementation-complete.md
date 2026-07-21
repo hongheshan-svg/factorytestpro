@@ -1,5 +1,7 @@
 # UTF 架构优化完成报告
 
+> **Status: last updated 2026-07, see [architecture-optimization-report.md](architecture-optimization-report.md) for the latest refactor status.** 以下内容中提及的 `ITestEngine -> OptimizedTestEngine`、`ITestExecutor`、`ITestValidator` 已随 `OptimizedTestEngine.cs` 的删除而移除；当前并发入口为 `ConfigDrivenTestEngine`（同时实现 `IStepExecutionService`）。
+
 ## ✅ 编译状态
 **整个解决方案**: 0错误，编译成功
 
@@ -76,17 +78,17 @@ UTF.HAL/
 
 ### UTF.Core (AddUtfCore)
 ```csharp
-✅ ICache → MemoryCache
-✅ ILogger → AdvancedLogger
-✅ ITestEngine → OptimizedTestEngine
-✅ ITestExecutor → TestExecutor
-✅ ITestValidator → TestValidator
-✅ IRetryPolicy → ExponentialBackoffRetryPolicy
-✅ TestOrchestrator
-✅ IPluginContainer → PluginContainer
-✅ IEventBus → EventBus
-✅ ITestResultRepository → FileTestResultRepository
-✅ IConfigurationAuditLog → FileAuditLog
+✅ ICache -> MemoryCache
+✅ ILogger -> AdvancedLogger
+✅ ConfigDrivenTestEngine (Transient) - 同时实现 IStepExecutionService
+✅ IStepExecutionService -> ConfigDrivenTestEngine (Transient)
+✅ ConfigDrivenTestValidator (Transient)
+✅ ConfigDrivenTestOrchestrator (Singleton)
+✅ IRetryPolicy -> ExponentialBackoffRetryPolicy
+✅ IPluginContainer -> PluginContainer
+✅ IEventBus -> EventBus
+✅ ITestResultRepository -> FileTestResultRepository
+✅ IConfigurationAuditLog -> FileAuditLog
 ```
 
 ### UTF.Configuration (AddUtfConfiguration)

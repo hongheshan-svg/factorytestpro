@@ -14,7 +14,7 @@ namespace UTF.Vision
     /// <summary>
     /// 机器视觉管理器 - 已集成缓存和验证
     /// </summary>
-    public class VisionManager : IDisposable
+    public class VisionManager : IDisposable, IAsyncDisposable
     {
         private readonly ILogger _logger;
         private readonly ICache _cache;
@@ -107,8 +107,12 @@ namespace UTF.Vision
                 
                 foreach (var systemInfo in defaultSystems)
                 {
+#pragma warning disable CS0618
+                    // SimulatedVisionSystem is intentionally used here as the default dev-only
+                    // vision system; production deployments should register a real IVisionSystem.
                     var visionSystem = new SimulatedVisionSystem(systemInfo.Id, systemInfo.Name, _logger);
-                    
+#pragma warning restore CS0618
+
                     // 初始化视觉系统
                     var initialized = await visionSystem.InitializeAsync();
                     if (initialized)
@@ -320,13 +324,15 @@ namespace UTF.Vision
         
         public void Dispose()
         {
+            // 同步释放采用 best-effort：在限时内等待异步断开完成，避免 .Wait() 死锁。
+            // 真正的资源清理走 DisposeAsync 路径。
             try
             {
                 _logger.Info("释放机器视觉管理器");
-                
-                // 断开所有连接
-                DisconnectAllAsync().Wait(5000);
-                
+
+                // 断开所有连接（限时等待，避免 .Wait() 死锁）
+                DisconnectAllAsync().Wait(TimeSpan.FromSeconds(5));
+
                 // 释放所有视觉系统
                 foreach (var system in _visionSystems.Values)
                 {
@@ -339,16 +345,63 @@ namespace UTF.Vision
                         _logger.Error($"释放视觉系统失败: {system.Name}", ex);
                     }
                 }
-                
+
                 _visionSystems.Clear();
                 _configuration.Clear();
-                
+
                 _logger.Info("机器视觉管理器已释放");
             }
             catch (Exception ex)
             {
                 _logger.Error("释放机器视觉管理器异常", ex);
             }
+        }
+
+        /// <summary>
+        /// 异步释放机器视觉管理器。等待所有视觉系统断开连接完成后再释放各系统，
+        /// 避免同步 .Wait() 造成的死锁风险。
+        /// </summary>
+        public async ValueTask DisposeAsync()
+        {
+            try
+            {
+                _logger.Info("异步释放机器视觉管理器");
+
+                // 断开所有连接
+                await DisconnectAllAsync().ConfigureAwait(false);
+
+                // 释放所有视觉系统
+                foreach (var system in _visionSystems.Values)
+                {
+                    try
+                    {
+                        // 优先走 IAsyncDisposable 路径
+                        if (system is IAsyncDisposable asyncDisposable)
+                        {
+                            await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            system.Dispose();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error($"异步释放视觉系统失败: {system.Name}", ex);
+                    }
+                }
+
+                _visionSystems.Clear();
+                _configuration.Clear();
+
+                _logger.Info("机器视觉管理器已异步释放");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("异步释放机器视觉管理器异常", ex);
+            }
+
+            GC.SuppressFinalize(this);
         }
     }
 }

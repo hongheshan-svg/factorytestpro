@@ -1,0 +1,55 @@
+<Project>
+  <!--
+    Central Package Management (CPM)
+    https://learn.microsoft.com/nuget/consume-packages/Central-Package-Management
+
+    All package versions are pinned here. Individual .csproj files MUST NOT
+    set a Version attribute on <PackageReference>; they reference a package by
+    name only and the version resolves from the <PackageVersion> entries below.
+
+    Rationale for version choices:
+      - Microsoft.Extensions.* are unified at 10.0.0 (target framework is net10.0).
+      - System.IO.Ports unified at 10.0.0 (previously 10.0.0 in UTF.HAL and 9.* in UTF.Plugins.Drivers).
+      - System.Drawing.Common pinned at 10.0.0 (already used by UTF.Reporting).
+      - Test SDK/xunit pinned at the currently-resolved versions from the restore graph.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Microsoft.Extensions (DI / Hosting / Logging) - unified at 10.0.0 -->
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+
+    <!-- System runtime packages - unified at 10.0.0 -->
+    <PackageVersion Include="System.IO.Ports" Version="10.0.0" />
+    <PackageVersion Include="System.Drawing.Common" Version="10.0.0" />
+
+    <!-- MVVM toolkit -->
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+
+    <!-- Test SDK / xunit - pinned at currently-resolved versions -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+
+    <!-- Mocking -->
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Transitive pinning overrides (CentralPackageTransitivePinningEnabled=true):
+      When a referenced project consumes one of these packages without an explicit
+      lower bound, NuGet's transitive pinning would otherwise resolve to the
+      package's earliest version (e.g. System.IO.Ports 4.4.0), which trips NU1602
+      under TreatWarningsAsErrors. These entries force transitive references to the
+      unified 10.0.0 floor for the solution.
+    -->
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+  </ItemGroup>
+</Project>

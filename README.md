@@ -44,6 +44,11 @@ Contributions are also welcome from anyone who wants to help improve the codebas
 - `UTF.Plugins.Example`: example command executor plugin
 - `UTF.Plugins.Drivers`: transport and device driver plugins
 - `tests/UTF.Core.Tests`: xUnit test project for core and plugin-host behavior
+- `tests/UTF.Business.Tests`: xUnit test project for business layer behavior
+- `tests/UTF.Configuration.Tests`: xUnit test project for configuration validators
+- `tests/UTF.Plugin.Host.Tests`: xUnit test project for plugin host behavior
+- `tests/UTF.Reporting.Tests`: xUnit test project for reporting behavior
+- `tests/UTF.UI.Tests`: xUnit test project for UI converters and view models
 
 ## Build
 
@@ -61,7 +66,7 @@ dotnet run --project UTF.UI/UTF.UI.csproj -c Debug
 ## Test
 
 ```powershell
-dotnet test tests/UTF.Core.Tests/UTF.Core.Tests.csproj --logger "console;verbosity=minimal"
+dotnet test UniversalTestFramework.sln
 ```
 
 ## Configuration And Plugins
@@ -78,7 +83,7 @@ dotnet test tests/UTF.Core.Tests/UTF.Core.Tests.csproj --logger "console;verbosi
 ## Current Status
 
 - Solution builds successfully in Debug
-- `UTF.Core.Tests` currently passes all tests in this workspace
+- 93/93 tests pass across 6 test projects (UTF.Core.Tests 79 + UTF.Business.Tests 6 + UTF.Configuration.Tests 3 + UTF.Plugin.Host.Tests 2 + UTF.Reporting.Tests 2 + UTF.UI.Tests 1)
 - The app is Windows-specific and expects real device connectivity or plugin-backed execution for production use
 
 ## Notes

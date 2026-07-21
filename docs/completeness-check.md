@@ -1,5 +1,7 @@
 # UTF 架构功能完整性检查报告
 
+> **Status: historical snapshot pre-2026-07 refactor.** 以下内容反映的是 2026-07 重构前的状态，其中提及的 `ITestEngine -> OptimizedTestEngine`、`ITestExecutor`、`ITestValidator` 等已随 `OptimizedTestEngine.cs` 的删除而移除，当前并发入口为 `ConfigDrivenTestEngine.cs`。当前状态请见 [docs/architecture-optimization-report.md](architecture-optimization-report.md)。
+
 ## ✅ 编译状态
 - **UTF.Plugin.Abstractions**: ✅ 成功 (0错误, 0警告)
 - **UTF.Configuration**: ✅ 成功 (0错误, 0警告)

@@ -28,29 +28,18 @@ public static class ServiceCollectionExtensions
                 LogFilePath = "logs/utf-global.log"
             }));
 
-        // 测试引擎（瞬态）
-        services.AddTransient<ITestEngine, OptimizedTestEngine>();
-
-        // 配置驱动测试引擎（瞬态）
-        services.AddTransient<ConfigDrivenTestEngine>();
+        // 配置驱动测试引擎（单例 - 无状态且线程安全；被 Singleton 编排器与 DUTMonitorManager 复用，
+        // 避免被 Singleton 捕获的 Transient 实例无法被 dispose 的 captive dependency 反模式）
+        services.AddSingleton<ConfigDrivenTestEngine>();
 
         // 配置驱动测试验证器（瞬态）
         services.AddTransient<ConfigDrivenTestValidator>();
 
-        // 配置驱动测试编排器（瞬态）
-        services.AddTransient<ConfigDrivenTestOrchestrator>();
+        // 配置驱动测试编排器（单例 - 持有共享会话状态）
+        services.AddSingleton<ConfigDrivenTestOrchestrator>();
 
-        // 测试执行器（瞬态）
-        services.AddTransient<ITestExecutor, TestExecutor>();
-
-        // 测试验证器（瞬态）
-        services.AddTransient<ITestValidator, TestValidator>();
-
-        // 重试策略（瞬态）
-        services.AddTransient<IRetryPolicy, ExponentialBackoffRetryPolicy>();
-
-        // 测试编排器（瞬态）
-        services.AddTransient<TestOrchestrator>();
+        // 重试策略（单例 - 被引擎复用）
+        services.AddSingleton<IRetryPolicy, ExponentialBackoffRetryPolicy>();
 
         // 插件容器（单例）
         services.AddSingleton<IPluginContainer, PluginContainer>();

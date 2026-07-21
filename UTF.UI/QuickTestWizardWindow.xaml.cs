@@ -1,42 +1,40 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Win32;
 using UTF.Plugin.Abstractions;
 using UTF.Plugin.Host;
+using UTF.UI.Models;
 using UTF.UI.Services;
+using UTF.UI.ViewModels;
 
 namespace UTF.UI
 {
     public partial class QuickTestWizardWindow : Window
     {
-        private readonly ConfigurationManager _configManager;
         private readonly StepExecutorPluginHost _pluginHost;
-        private readonly ObservableCollection<WizardStepItem> _wizardSteps = new();
-        private readonly List<StepCategoryInfo> _stepCategories = new();
+        private readonly QuickTestWizardViewModel _viewModel;
         private int _currentStep = 1;
-        private int _nextStepId = 1;
 
         /// <summary>
-        /// 配置已创建事件，MainWindow 可监听以刷新 UI
+        /// 配置已创建事件，WindowFactory / MainWindow 可监听以刷新 UI。
         /// </summary>
         public event EventHandler? ConfigurationCreated;
 
         public QuickTestWizardWindow(
-            ConfigurationManager configManager,
-            StepExecutorPluginHost pluginHost)
+            StepExecutorPluginHost pluginHost,
+            QuickTestWizardViewModel viewModel)
         {
-            _configManager = configManager;
             _pluginHost = pluginHost;
+            _viewModel = viewModel;
             InitializeComponent();
+            DataContext = _viewModel;
             Loaded += OnWindowLoaded;
         }
 
@@ -44,20 +42,28 @@ namespace UTF.UI
 
         private async void OnWindowLoaded(object sender, RoutedEventArgs e)
         {
-            await _pluginHost.InitializeAsync();
-            BuildStepCategories();
-            PopulatePluginInfo();
-            PopulateCategoryCombo();
+            // P1-8: wrap async-void body so plugin init failures surface to the user instead of crashing the app.
+            try
+            {
+                await _pluginHost.InitializeAsync();
+                BuildStepCategories();
+                PopulatePluginInfo();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"初始化插件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         // ────────────────── Plugin Discovery ──────────────────
 
         /// <summary>
-        /// 从已加载的插件构建用户友好的测试类别列表
+        /// 从已加载的插件构建用户友好的测试类别列表，填充到 VM 的
+        /// <see cref="QuickTestWizardViewModel.AvailableStepCategories"/>。
         /// </summary>
         private void BuildStepCategories()
         {
-            _stepCategories.Clear();
+            _viewModel.AvailableStepCategories.Clear();
 
             // 仅从插件中发现能力，避免 UI 维护硬编码类型表。
             var loadedPlugins = _pluginHost.LoadedPlugins;
@@ -67,17 +73,14 @@ namespace UTF.UI
                 {
                     foreach (var channel in plugin.SupportedChannels)
                     {
-                        var label = BuildCategoryLabel(plugin.Name, stepType, channel);
-                        var hint = BuildCommandHint(plugin.Name, stepType, channel);
-
-                        if (!_stepCategories.Any(c => c.StepType == stepType && c.Channel == channel))
+                        if (!_viewModel.AvailableStepCategories.Any(c => c.StepType == stepType && c.Channel == channel))
                         {
-                            _stepCategories.Add(new StepCategoryInfo
+                            _viewModel.AvailableStepCategories.Add(new WizardStepCategory
                             {
-                                Label = label,
+                                Label = BuildCategoryLabel(plugin.Name, stepType, channel),
                                 StepType = stepType,
                                 Channel = channel,
-                                CommandHint = hint,
+                                CommandHint = BuildCommandHint(plugin.Name, stepType, channel),
                                 PluginId = plugin.PluginId,
                                 PluginName = plugin.Name
                             });
@@ -85,17 +88,22 @@ namespace UTF.UI
                     }
                 }
             }
+
+            if (_viewModel.AvailableStepCategories.Count > 0)
+            {
+                _viewModel.SelectedStepCategory = _viewModel.AvailableStepCategories[0];
+            }
+            else
+            {
+                _viewModel.StepCommandHint = "💡 未发现可用插件能力。请先安装并加载步骤执行插件。";
+            }
         }
 
         private static string BuildCategoryLabel(string pluginName, string stepType, string channel)
-        {
-            return $"🔧 {pluginName} · {stepType}/{channel}";
-        }
+            => $"🔧 {pluginName} · {stepType}/{channel}";
 
         private static string BuildCommandHint(string pluginName, string stepType, string channel)
-        {
-            return $"插件 {pluginName} 将处理 {stepType}/{channel}，请输入该能力对应的命令或请求内容。";
-        }
+            => $"插件 {pluginName} 将处理 {stepType}/{channel}，请输入该能力对应的命令或请求内容。";
 
         private void PopulatePluginInfo()
         {
@@ -117,27 +125,6 @@ namespace UTF.UI
             {
                 WizPluginSummary.Text = "未检测到已安装插件。系统提供内置的基础测试类型，安装插件可扩展更多能力。";
                 WizNoPluginHint.Visibility = Visibility.Visible;
-            }
-        }
-
-        private void PopulateCategoryCombo()
-        {
-            WizStepCategory.Items.Clear();
-            foreach (var category in _stepCategories)
-            {
-                WizStepCategory.Items.Add(new ComboBoxItem
-                {
-                    Content = category.Label,
-                    Tag = category
-                });
-            }
-            if (WizStepCategory.Items.Count > 0)
-            {
-                WizStepCategory.SelectedIndex = 0;
-            }
-            else
-            {
-                WizCommandHint.Text = "💡 未发现可用插件能力。请先安装并加载步骤执行插件。";
             }
         }
 
@@ -208,9 +195,9 @@ namespace UTF.UI
         private bool ValidateStep1()
         {
             var errors = new List<string>();
-            if (string.IsNullOrWhiteSpace(WizProductName.Text))
+            if (string.IsNullOrWhiteSpace(_viewModel.ProductName))
                 errors.Add("请输入产品名称");
-            if (string.IsNullOrWhiteSpace(WizProductModel.Text))
+            if (string.IsNullOrWhiteSpace(_viewModel.ProductModel))
                 errors.Add("请输入产品型号");
 
             if (errors.Count > 0)
@@ -221,150 +208,11 @@ namespace UTF.UI
             return true;
         }
 
-        // ────────────────── Step 2: Test Steps ──────────────────
-
-        private void OnStepCategoryChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (WizStepCategory.SelectedItem is ComboBoxItem item && item.Tag is StepCategoryInfo category)
-            {
-                WizCommandHint.Text = "💡 " + category.CommandHint;
-            }
-        }
-
-        private void AddWizardStep_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrWhiteSpace(WizStepName.Text))
-            {
-                MessageBox.Show("请输入步骤名称", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            if (WizStepCategory.SelectedItem is not ComboBoxItem categoryItem ||
-                categoryItem.Tag is not StepCategoryInfo category)
-            {
-                MessageBox.Show("请选择测试类型", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            // 构建 Expected 表达式
-            string? expected = BuildExpectedExpression();
-
-            var timeout = 5000;
-            if (WizStepTimeout.SelectedItem is ComboBoxItem timeoutItem && timeoutItem.Tag is string timeoutStr)
-                int.TryParse(timeoutStr, out timeout);
-
-            var stepItem = new WizardStepItem
-            {
-                Id = $"step_{_nextStepId:D3}",
-                Order = _wizardSteps.Count + 1,
-                Name = WizStepName.Text.Trim(),
-                StepType = category.StepType,
-                Channel = category.Channel,
-                CategoryLabel = category.Label,
-                Command = WizStepCommand.Text.Trim(),
-                Expected = expected,
-                Timeout = timeout
-            };
-
-            _wizardSteps.Add(stepItem);
-            _nextStepId++;
-            RefreshStepList();
-
-            // 清空输入
-            WizStepName.Text = "";
-            WizStepCommand.Text = "";
-            WizExpectedValue.Text = "";
-            WizExpectedMode.SelectedIndex = 0;
-            WizStepTimeout.SelectedIndex = 0;
-        }
-
-        private string? BuildExpectedExpression()
-        {
-            if (WizExpectedMode.SelectedItem is not ComboBoxItem modeItem)
-                return null;
-
-            var mode = modeItem.Tag?.ToString() ?? "none";
-            var value = WizExpectedValue.Text.Trim();
-
-            if (mode == "none" || string.IsNullOrEmpty(value))
-                return null;
-
-            return mode switch
-            {
-                "contains" => $"contains:{value}",
-                "equals" => $"equals:{value}",
-                "regex" => $"regex:{value}",
-                _ => null
-            };
-        }
-
-        private void RemoveWizStep_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button btn && btn.Tag is string stepId)
-            {
-                var item = _wizardSteps.FirstOrDefault(s => s.Id == stepId);
-                if (item != null)
-                {
-                    _wizardSteps.Remove(item);
-                    RenumberSteps();
-                    RefreshStepList();
-                }
-            }
-        }
-
-        private void MoveWizStepUp_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button btn && btn.Tag is string stepId)
-            {
-                int idx = -1;
-                for (int i = 0; i < _wizardSteps.Count; i++)
-                {
-                    if (_wizardSteps[i].Id == stepId) { idx = i; break; }
-                }
-                if (idx > 0)
-                {
-                    _wizardSteps.Move(idx, idx - 1);
-                    RenumberSteps();
-                    RefreshStepList();
-                }
-            }
-        }
-
-        private void MoveWizStepDown_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button btn && btn.Tag is string stepId)
-            {
-                int idx = -1;
-                for (int i = 0; i < _wizardSteps.Count; i++)
-                {
-                    if (_wizardSteps[i].Id == stepId) { idx = i; break; }
-                }
-                if (idx >= 0 && idx < _wizardSteps.Count - 1)
-                {
-                    _wizardSteps.Move(idx, idx + 1);
-                    RenumberSteps();
-                    RefreshStepList();
-                }
-            }
-        }
-
-        private void RenumberSteps()
-        {
-            for (int i = 0; i < _wizardSteps.Count; i++)
-                _wizardSteps[i].Order = i + 1;
-        }
-
-        private void RefreshStepList()
-        {
-            WizStepList.ItemsSource = null;
-            WizStepList.ItemsSource = _wizardSteps;
-            WizStepCountLabel.Text = $"共 {_wizardSteps.Count} 步";
-            WizNoStepHint.Visibility = _wizardSteps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        }
+        // ────────────────── Step 2 Validation ──────────────────
 
         private bool ValidateStep2()
         {
-            if (_wizardSteps.Count == 0)
+            if (_viewModel.Steps.Count == 0)
             {
                 MessageBox.Show("请至少添加一个测试步骤", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return false;
@@ -376,18 +224,8 @@ namespace UTF.UI
 
         private void PopulateReview()
         {
-            var icon = (WizProductIcon.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "📱";
-            var category = WizProductCategory.Text;
-            if (string.IsNullOrWhiteSpace(category) && WizProductCategory.SelectedItem is ComboBoxItem catItem)
-                category = catItem.Content?.ToString() ?? "";
-
-            WizReviewIcon.Text = icon;
-            WizReviewProductName.Text = WizProductName.Text.Trim();
-            WizReviewProductModel.Text = WizProductModel.Text.Trim();
-            WizReviewCategory.Text = string.IsNullOrWhiteSpace(category) ? "未分类" : category;
-            WizReviewDUTCount.Text = $"{(int)WizDUTCount.Value} 个工位";
-
-            WizReviewStepList.ItemsSource = _wizardSteps;
+            var productName = _viewModel.ProductName?.Trim() ?? string.Empty;
+            var productModel = _viewModel.ProductModel?.Trim() ?? string.Empty;
 
             // 验证
             var validation = ValidateFullConfig();
@@ -396,7 +234,7 @@ namespace UTF.UI
             {
                 WizValidationTitle.Text = "✅ 配置验证通过";
                 WizValidationTitle.Foreground = new SolidColorBrush(Color.FromRgb(40, 167, 69));
-                WizValidationDetail.Text = $"产品: {WizProductName.Text.Trim()} | 型号: {WizProductModel.Text.Trim()} | {_wizardSteps.Count} 个测试步骤";
+                WizValidationDetail.Text = $"产品: {productName} | 型号: {productModel} | {_viewModel.Steps.Count} 个测试步骤";
             }
             else
             {
@@ -409,14 +247,14 @@ namespace UTF.UI
         private List<string> ValidateFullConfig()
         {
             var errors = new List<string>();
-            if (string.IsNullOrWhiteSpace(WizProductName.Text))
+            if (string.IsNullOrWhiteSpace(_viewModel.ProductName))
                 errors.Add("产品名称未填写");
-            if (_wizardSteps.Count == 0)
+            if (_viewModel.Steps.Count == 0)
                 errors.Add("没有测试步骤");
 
             // 检查无插件支持的步骤
             var loadedPlugins = _pluginHost.LoadedPlugins;
-            foreach (var step in _wizardSteps)
+            foreach (var step in _viewModel.Steps)
             {
                 bool hasPlugin = loadedPlugins.Any(p =>
                     p.SupportedStepTypes.Contains(step.StepType, StringComparer.OrdinalIgnoreCase) &&
@@ -438,38 +276,40 @@ namespace UTF.UI
             try
             {
                 BtnSave.IsEnabled = false;
-                var config = BuildUnifiedConfiguration();
 
-                if (WizSaveAsDefault.IsChecked == true)
+                var input = _viewModel.BuildInput();
+                if (!_viewModel.ValidateInput(input, out var inputErrors))
                 {
-                    await _configManager.SaveUnifiedConfigurationAsync(config);
-                    await _configManager.RefreshConfiguration();
+                    MessageBox.Show(string.Join("\n", inputErrors), "请完善配置", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
                 }
 
-                if (WizExportCopy.IsChecked == true)
+                string? exportPath = null;
+                if (_viewModel.ExportCopy)
                 {
                     var dialog = new SaveFileDialog
                     {
                         Title = "导出测试配置",
                         Filter = "JSON 配置文件 (*.json)|*.json",
-                        FileName = $"{WizProductName.Text.Trim()}-test-config.json",
+                        FileName = $"{_viewModel.ProductName?.Trim()}-test-config.json",
                         DefaultExt = "json"
                     };
                     if (dialog.ShowDialog() == true)
                     {
-                        var json = JsonSerializer.Serialize(config, new JsonSerializerOptions
-                        {
-                            WriteIndented = true,
-                            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-                        });
-                        await File.WriteAllTextAsync(dialog.FileName, json);
+                        exportPath = dialog.FileName;
                     }
                 }
 
+                // 委托给 VM（VM 内部 Build + 可选保存 + 触发 ConfigurationCreated）。
+                await _viewModel.SaveAsync(
+                    saveAsDefault: _viewModel.SaveAsDefault,
+                    exportPath: exportPath);
+
+                // 将 VM 触发的 ConfigurationCreated 事件转发到窗口事件（向后兼容订阅）。
                 ConfigurationCreated?.Invoke(this, EventArgs.Empty);
 
                 MessageBox.Show(
-                    $"测试配置已成功创建！\n\n产品: {WizProductName.Text.Trim()}\n测试步骤: {_wizardSteps.Count} 步\n工位数量: {(int)WizDUTCount.Value}\n\n返回主界面后点击【开始测试】即可运行。",
+                    $"测试配置已成功创建！\n\n产品: {_viewModel.ProductName?.Trim()}\n测试步骤: {_viewModel.Steps.Count} 步\n工位数量: {_viewModel.DutCount}\n\n返回主界面后点击【开始测试】即可运行。",
                     "创建成功",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
@@ -487,122 +327,6 @@ namespace UTF.UI
             }
         }
 
-        private UnifiedConfiguration BuildUnifiedConfiguration()
-        {
-            var productName = WizProductName.Text.Trim();
-            var productModel = WizProductModel.Text.Trim();
-            var icon = (WizProductIcon.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "📱";
-            var category = WizProductCategory.Text;
-            if (string.IsNullOrWhiteSpace(category) && WizProductCategory.SelectedItem is ComboBoxItem catItem)
-                category = catItem.Content?.ToString() ?? "";
-
-            var dutCount = (int)WizDUTCount.Value;
-
-            // 通信端点
-            var serialPorts = new List<string>();
-            var networkHosts = new List<string>();
-            if (WizUseSerial.IsChecked == true)
-            {
-                for (int i = 0; i < dutCount; i++)
-                    serialPorts.Add($"COM{3 + i}");
-            }
-            if (WizUseNetwork.IsChecked == true)
-            {
-                for (int i = 0; i < dutCount; i++)
-                    networkHosts.Add($"192.168.1.{10 + i}");
-            }
-
-            // 构建步骤配置
-            var steps = _wizardSteps.Select(s => new TestStepConfig
-            {
-                Id = s.Id,
-                Name = s.Name,
-                Order = s.Order,
-                Enabled = true,
-                Type = s.StepType,
-                Channel = s.Channel,
-                Target = "dut",
-                Command = s.Command,
-                Expected = s.Expected,
-                Timeout = s.Timeout,
-                Delay = 500
-            }).ToList();
-
-            return new UnifiedConfiguration
-            {
-                ConfigurationInfo = new ConfigurationInfo
-                {
-                    Name = $"{productName}测试配置",
-                    Version = "1.0.0",
-                    CreatedDate = DateTime.UtcNow.ToString("O"),
-                    Description = $"由快速向导创建的 {productName} 测试配置",
-                    Author = "UTF Quick Wizard"
-                },
-                SystemSettings = new SystemSettings
-                {
-                    LogLevel = "Info",
-                    AutoSaveResults = true,
-                    ResultsPath = "./test-results",
-                    DefaultLanguage = "zh-CN",
-                    Theme = "Light"
-                },
-                DUTConfiguration = new DUTConfiguration
-                {
-                    ProductInfo = new ProductInfo
-                    {
-                        Name = productName,
-                        Model = productModel,
-                        Icon = icon,
-                        Category = category
-                    },
-                    GlobalSettings = new GlobalSettings
-                    {
-                        DefaultMaxConcurrent = dutCount,
-                        TestTimeout = 300,
-                        RetryCount = 2,
-                        RetryDelay = 2000
-                    },
-                    CommunicationEndpoints = new CommunicationEndpoints
-                    {
-                        SerialPorts = serialPorts,
-                        NetworkHosts = networkHosts
-                    },
-                    NamingConfig = new NamingConfig
-                    {
-                        Template = $"{{TypeName}}测试工位{{Index}}",
-                        IdTemplate = "DUT-{Index}"
-                    },
-                    Connections = new DUTConnections
-                    {
-                        Primary = WizUseSerial.IsChecked == true
-                            ? new ConnectionConfig { Type = "Serial", BaudRate = 115200, DataBits = 8, StopBits = 1, Parity = "None" }
-                            : WizUseNetwork.IsChecked == true
-                                ? new ConnectionConfig { Type = "Network", TelnetPort = 23 }
-                                : null
-                    }
-                },
-                TestProjectConfiguration = new TestProjectConfiguration
-                {
-                    TestMode = new TestMode
-                    {
-                        Id = "production",
-                        Name = "生产测试",
-                        Description = $"{productName}生产测试流程",
-                        DefaultTimeout = 300000,
-                        EnableParallel = true,
-                        MaxRetries = 2
-                    },
-                    TestProject = new TestProject
-                    {
-                        Id = $"{productName.ToLowerInvariant().Replace(" ", "_")}_test",
-                        Name = $"{productName}生产测试",
-                        Enabled = true,
-                        Steps = steps
-                    }
-                }
-            };
-        }
-
         // ────────────────── UI Event Handlers ──────────────────
 
         private void OnProductInfoChanged(object sender, TextChangedEventArgs e)
@@ -618,7 +342,7 @@ namespace UTF.UI
 
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
         {
-            if (_wizardSteps.Count > 0)
+            if (_viewModel.Steps.Count > 0)
             {
                 var result = MessageBox.Show("已添加的测试步骤将丢失，确定退出吗？", "确认退出",
                     MessageBoxButton.YesNo, MessageBoxImage.Question);
@@ -629,49 +353,6 @@ namespace UTF.UI
         }
 
         // ────────────────── Inner Models ──────────────────
-
-        /// <summary>
-        /// 向导中的步骤项
-        /// </summary>
-        public class WizardStepItem : INotifyPropertyChanged
-        {
-            public string Id { get; set; } = "";
-            private int _order;
-            public int Order
-            {
-                get => _order;
-                set { _order = value; OnPropertyChanged(); }
-            }
-            public string Name { get; set; } = "";
-            public string StepType { get; set; } = "";
-            public string Channel { get; set; } = "";
-            public string CategoryLabel { get; set; } = "";
-            public string? Command { get; set; }
-            public string? Expected { get; set; }
-            public int Timeout { get; set; } = 5000;
-
-            public string CommandPreview =>
-                string.IsNullOrWhiteSpace(Command)
-                    ? "(无命令)"
-                    : Command.Length > 40 ? Command[..37] + "..." : Command;
-
-            public event PropertyChangedEventHandler? PropertyChanged;
-            protected void OnPropertyChanged([CallerMemberName] string? name = null)
-                => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-        }
-
-        /// <summary>
-        /// 测试类别信息（映射插件能力到用户友好的类别）
-        /// </summary>
-        private sealed class StepCategoryInfo
-        {
-            public string Label { get; set; } = "";
-            public string StepType { get; set; } = "";
-            public string Channel { get; set; } = "";
-            public string CommandHint { get; set; } = "";
-            public string PluginId { get; set; } = "";
-            public string PluginName { get; set; } = "";
-        }
 
         /// <summary>
         /// 插件显示信息

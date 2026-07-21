@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using Microsoft.Win32;
 using System.IO;
 using System.Text.Json;
+using UTF.UI.Models;
 using UTF.UI.Services;
 
 namespace UTF.UI
@@ -273,29 +274,5 @@ namespace UTF.UI
             _currentFilePath = "";
             UpdateStepCount();
         }
-    }
-
-    public class TestPlan
-    {
-        public string Name { get; set; } = "";
-        public string Description { get; set; } = "";
-        public int EstimatedDurationMinutes { get; set; }
-        public bool AutoRun { get; set; }
-        public bool GenerateReport { get; set; } = true;
-        public List<TestPlanStep> TestSteps { get; set; } = new();
-        public DateTime CreatedAt { get; set; }
-        public DateTime ModifiedAt { get; set; }
-    }
-
-    public class TestPlanStep
-    {
-        public string StepName { get; set; } = "";
-        public string Description { get; set; } = "";
-        public string StepType { get; set; } = "";
-        public string Channel { get; set; } = "";
-        public string Command { get; set; } = "";
-        public string Expected { get; set; } = "";
-        public int TimeoutSeconds { get; set; } = 60;
-        public bool IsRequired { get; set; } = true;
     }
 }

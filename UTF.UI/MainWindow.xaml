@@ -15,6 +15,7 @@
         <local:TestStatusToColorConverter x:Key="StatusToColorConverter"/>
         <local:DutCountToColorConverter x:Key="DutCountToColorConverter"/>
         <converters:LogLevelToColorConverter x:Key="LogLevelToColorConverter"/>
+        <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         
         <!-- 测试结果样式 -->
         <Style x:Key="PassResultStyle" TargetType="TextBlock">
@@ -66,24 +67,34 @@
         <!-- 菜单栏 -->
         <Menu Grid.Row="0" Background="White" BorderBrush="#FFE0E0E0" BorderThickness="0,0,0,1">
             <MenuItem Header="文件(_F)">
-                <MenuItem Header="导入配置(_I)" Click="ImportConfig_Click"/>
+                <MenuItem x:Name="ImportConfigFileMenuItem" Header="导入配置(_I)" Command="{Binding ImportConfigCommand}"
+                          IsEnabled="{Binding CanImportConfig}"/>
                 <Separator/>
-                <MenuItem Header="退出(_X)" Click="ExitApp_Click"/>
+                <MenuItem Header="退出(_X)" Command="{Binding ExitAppCommand}"/>
             </MenuItem>
-            <MenuItem Header="配置(_C)">
-                <MenuItem Header="配置管理中心(_M)" Click="OpenConfigCenter_Click"/>
+            <MenuItem x:Name="ConfigurationMenuItem" Header="配置(_C)" IsEnabled="{Binding CanConfigureSystem}">
+                <MenuItem x:Name="ConfigCenterMenuItem" Header="配置管理中心(_M)" Command="{Binding OpenConfigurationCenterCommand}"/>
                 <Separator/>
-                <MenuItem Header="导入配置(_I)" Click="ImportConfig_Click"/>
+                <MenuItem x:Name="ImportConfigMenuItem" Header="导入配置(_I)" Command="{Binding ImportConfigCommand}"/>
             </MenuItem>
             <MenuItem Header="工具(_T)">
-                <MenuItem Header="🚀 快速创建测试(_Q)" Click="OpenQuickTestWizard_Click" FontWeight="SemiBold"/>
+                <MenuItem x:Name="QuickCreateMenuItem" Header="🚀 快速创建测试(_Q)" Command="{Binding OpenQuickTestWizardCommand}" FontWeight="SemiBold"
+                          IsEnabled="{Binding CanManageTestPlans}"/>
                 <Separator/>
-                <MenuItem Header="插件管理(_P)" Click="OpenPluginManager_Click"/>
-                <MenuItem Header="设备管理(_D)" Click="OpenDeviceManager_Click"/>
-                <MenuItem Header="用户管理(_U)" Click="OpenUserManager_Click"/>
+                <MenuItem x:Name="PluginManagerMenuItem" Header="插件管理(_P)" Command="{Binding OpenPluginManagerCommand}"
+                          IsEnabled="{Binding CanConfigureSystem}"/>
+                <MenuItem x:Name="DeviceManagerMenuItem" Header="设备管理(_D)" Command="{Binding OpenDeviceManagerCommand}"
+                          IsEnabled="{Binding CanManageDevices}"/>
+                <MenuItem x:Name="UserManagerMenuItem" Header="用户管理(_U)" Command="{Binding OpenUserManagerCommand}"
+                          IsEnabled="{Binding CanManageUsers}"/>
                 <Separator/>
-                <MenuItem Header="测试计划编辑器(_E)" Click="OpenTestPlanEditor_Click"/>
-                <MenuItem Header="配置管理中心(_C)" Click="OpenConfigCenter_Click"/>
+                <MenuItem x:Name="TestPlanEditorMenuItem" Header="测试计划编辑器(_E)" Command="{Binding OpenTestPlanEditorCommand}"
+                          IsEnabled="{Binding CanManageTestPlans}"/>
+                <MenuItem x:Name="ToolsConfigCenterMenuItem" Header="配置管理中心(_C)" Command="{Binding OpenConfigurationCenterCommand}"
+                          IsEnabled="{Binding CanConfigureSystem}"/>
+            </MenuItem>
+            <MenuItem Header="账户(_A)">
+                <MenuItem Header="退出登录" Command="{Binding LogoutCommand}"/>
             </MenuItem>
         </Menu>
         
@@ -100,14 +111,14 @@
                     <TextBlock Text="⚡" FontSize="20" Margin="0,0,8,0" VerticalAlignment="Center"/>
                     <TextBlock Text="通用自动化测试平台" FontSize="18" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                     <Border Background="#1976D2" CornerRadius="12" Padding="10,3" Margin="20,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Name="UserInfoText" Text="用户: 管理员" Foreground="White" FontSize="11"/>
+                        <TextBlock Name="UserInfoText" Text="用户: 未登录" Foreground="White" FontSize="11"/>
                     </Border>
                     <Border Background="#1976D2" CornerRadius="12" Padding="10,3" Margin="8,0,0,0" VerticalAlignment="Center">
                         <TextBlock Name="StationInfoText" Text="站台: 测试站01" Foreground="White" FontSize="11"/>
                     </Border>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
-                    <TextBlock Name="ProductModelText" Text="产品型号: 加载中..." Foreground="#FFE082" FontSize="15" FontWeight="SemiBold"/>
+                    <TextBlock Name="ProductModelText" Text="{Binding ProductModelText}" Foreground="#FFE082" FontSize="15" FontWeight="SemiBold"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -115,18 +126,21 @@
         <!-- 工具栏 -->
         <Border Grid.Row="2" Background="White" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1">
             <StackPanel Orientation="Horizontal" Margin="16,0" VerticalAlignment="Center">
-                <Button Name="StartTestBtn" Content="▶  开始测试" Padding="18,9" FontSize="13" FontWeight="SemiBold"
-                        Background="{StaticResource SuccessBrush}" Click="StartTestBtn_Click"/>
+                <Button Name="StartTestBtn" Content="{Binding StartTestButtonText}" Padding="18,9" FontSize="13" FontWeight="SemiBold"
+                        Background="{StaticResource SuccessBrush}" Command="{Binding StartTestCommand}"
+                        IsEnabled="{Binding CanStartTest}"/>
                 <Button Name="StopTestBtn" Content="⏹  停止测试" Padding="18,9" FontSize="13" FontWeight="SemiBold"
-                        Background="{StaticResource WarnBrush}" Margin="8,0,0,0" Click="StopTestBtn_Click"/>
+                        Background="{StaticResource WarnBrush}" Margin="8,0,0,0" Command="{Binding StopTestCommand}"
+                        IsEnabled="{Binding CanStopTest}"/>
                 <Rectangle Width="1" Fill="#E0E0E0" Margin="16,8"/>
-                <Button Content="🚀 快速创建测试" Padding="14,8" FontSize="12" FontWeight="SemiBold"
+                <Button x:Name="QuickCreateButton" Content="🚀 快速创建测试" Padding="14,8" FontSize="12" FontWeight="SemiBold"
                         Background="#007ACC" Foreground="White" BorderThickness="0" Cursor="Hand"
-                        Click="OpenQuickTestWizard_Click" ToolTip="向导式快速创建测试配置"/>
+                        Command="{Binding OpenQuickTestWizardCommand}" ToolTip="向导式快速创建测试配置"
+                        IsEnabled="{Binding CanManageTestPlans}"/>
                 <Rectangle Width="1" Fill="#E0E0E0" Margin="16,8"/>
                 <TextBlock Text="状态:" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,6,0"/>
                 <Border VerticalAlignment="Center" Background="#E8F5E9" CornerRadius="10" Padding="10,3">
-                    <TextBlock Name="StatusText" Text="系统就绪" Foreground="#2E7D32" FontWeight="SemiBold" FontSize="12"/>
+                    <TextBlock Name="StatusText" Text="{Binding StatusText}" Foreground="#2E7D32" FontWeight="SemiBold" FontSize="12"/>
                 </Border>
                 <Rectangle Width="1" Fill="#E0E0E0" Margin="16,8"/>
                 <!-- 步骤预览 Badge -->
@@ -178,14 +192,18 @@
                             
                             <TextBlock Text="使用上方工具栏进行测试控制" FontSize="10" Foreground="#ADB5BD" VerticalAlignment="Center" Margin="0,0,15,0"/>
                             
-                            <Button Content="🔄 刷新" Margin="3,0" Padding="8,4" FontSize="10" Click="RefreshDUTsBtn_Click"/>
-                            <Button Content="📤 导出报告" Margin="3,0" Padding="8,4" FontSize="10" Click="ExportReportBtn_Click"/>
-                            <Button Content="🗑️ 清除日志" Margin="3,0" Padding="8,4" FontSize="10" Click="ClearAllLogsBtn_Click"/>
+                            <Button Content="🔄 刷新" Margin="3,0" Padding="8,4" FontSize="10"
+                                    Command="{Binding RefreshDUTsCommand}"/>
+                            <Button x:Name="ExportReportButton" Content="📤 导出报告" Margin="3,0" Padding="8,4" FontSize="10" Command="{Binding ExportReportCommand}"
+                                    IsEnabled="{Binding CanExportReport}"/>
+                            <Button x:Name="ClearLogsButton" Content="🗑️ 清除日志" Margin="3,0" Padding="8,4" FontSize="10" Command="{Binding ClearAllLogsCommand}"
+                                    IsEnabled="{Binding CanClearLogs}"/>
                         </StackPanel>
                     </Border>
                     
                     <!-- DUT列表（内置滚动优化） -->
-                    <DataGrid Grid.Row="1" x:Name="MainDUTListDataGrid" 
+                    <DataGrid Grid.Row="1" x:Name="MainDUTListDataGrid"
+                              ItemsSource="{Binding DUTItems}"
                               AutoGenerateColumns="False"
                               CanUserAddRows="False"
                               CanUserDeleteRows="False"
@@ -249,11 +267,17 @@
                                     <DataTemplate>
                                         <Border Padding="3" Background="#F8F9FA" CornerRadius="3">
                                             <Border.ContextMenu>
-                                                <ContextMenu>
-                                                    <MenuItem Header="📝 查看完整日志" Click="ViewDUTLogBtn_Click"/>
-                                                    <MenuItem Header="📊 详细信息" Click="ViewDUTDetailBtn_Click"/>
+                                                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                    <MenuItem Header="📝 查看完整日志"
+                                                              Command="{Binding DataContext.ViewDutLogCommand, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="📊 详细信息"
+                                                              Command="{Binding DataContext.ViewDutDetailCommand, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}"
+                                                              CommandParameter="{Binding}"/>
                                                     <Separator/>
-                                                    <MenuItem Header="🔧 重新测试" Click="RetestDUTBtn_Click"/>
+                                                    <MenuItem Header="🔧 重新测试"
+                                                              Command="{Binding DataContext.RetestDutCommand, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}"
+                                                              CommandParameter="{Binding}"/>
                                                 </ContextMenu>
                                             </Border.ContextMenu>
                                             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" MaxHeight="30">
@@ -294,34 +318,34 @@
                 </Grid.ColumnDefinitions>
                 
                 <!-- 左侧系统状态 -->
-                <TextBlock Name="StatusTextFooter" Text="系统就绪" Foreground="White" VerticalAlignment="Center" FontSize="11" TextTrimming="CharacterEllipsis"/>
-                
+                <TextBlock Name="StatusTextFooter" Text="{Binding StatusTextFooter}" Foreground="White" VerticalAlignment="Center" FontSize="11" TextTrimming="CharacterEllipsis"/>
+
                 <!-- DUT测试统计 (支持千万级数字显示) -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0">
                     <TextBlock Text="📊 DUT统计:" Foreground="#B0B0B0" FontSize="11" Margin="0,0,12,0"/>
-                    
+
                     <TextBlock Text="总:" Foreground="#B0B0B0" FontSize="11" Margin="0,0,2,0"/>
-                    <TextBlock Name="TotalDUTsText" Text="0" Foreground="White" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
-                    
+                    <TextBlock Name="TotalDUTsText" Text="{Binding TotalDuts}" Foreground="White" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
+
                     <TextBlock Text="|" Foreground="#B0B0B0" FontSize="11" Margin="6,0"/>
                     <TextBlock Text="测试中:" Foreground="#F39C12" FontSize="11" Margin="0,0,2,0"/>
-                    <TextBlock Name="RunningDUTsText" Text="0" Foreground="#F39C12" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
-                    
+                    <TextBlock Name="RunningDUTsText" Text="{Binding RunningDuts}" Foreground="#F39C12" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
+
                     <TextBlock Text="|" Foreground="#B0B0B0" FontSize="11" Margin="6,0"/>
                     <TextBlock Text="等待:" Foreground="#6C757D" FontSize="11" Margin="0,0,2,0"/>
-                    <TextBlock Name="WaitingDUTsText" Text="0" Foreground="#B0B0B0" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
-                    
+                    <TextBlock Name="WaitingDUTsText" Text="{Binding WaitingDuts}" Foreground="#B0B0B0" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
+
                     <TextBlock Text="|" Foreground="#B0B0B0" FontSize="11" Margin="6,0"/>
                     <TextBlock Text="✅合格:" Foreground="#28A745" FontSize="11" Margin="0,0,2,0"/>
-                    <TextBlock Name="PassedDUTsText" Text="0" Foreground="#28A745" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
-                    
+                    <TextBlock Name="PassedDUTsText" Text="{Binding PassedDuts}" Foreground="#28A745" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
+
                     <TextBlock Text="|" Foreground="#B0B0B0" FontSize="11" Margin="6,0"/>
                     <TextBlock Text="❌不合格:" Foreground="#DC3545" FontSize="11" Margin="0,0,2,0"/>
-                    <TextBlock Name="FailedDUTsText" Text="0" Foreground="#DC3545" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
-                    
+                    <TextBlock Name="FailedDUTsText" Text="{Binding FailedDuts}" Foreground="#DC3545" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
+
                     <TextBlock Text="|" Foreground="#B0B0B0" FontSize="11" Margin="6,0"/>
                     <TextBlock Text="通过率:" Foreground="#007BFF" FontSize="11" Margin="0,0,2,0"/>
-                    <TextBlock Name="PassRateMainText" Text="0%" Foreground="#007BFF" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="45" TextAlignment="Right"/>
+                    <TextBlock Name="PassRateMainText" Text="{Binding PassRateText}" Foreground="#007BFF" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="45" TextAlignment="Right"/>
                 </StackPanel>
                 
                 <!-- 测试时间统计 -->
@@ -346,7 +370,7 @@
                                        Foreground="White" FontSize="11" FontWeight="Bold"/>
                         </StackPanel>
                     </Border>
-                    <TextBlock Name="DateTimeText" Text="2024-01-01 12:00:00" Foreground="White" FontSize="11" Margin="0,0,5,0"/>
+                    <TextBlock Name="DateTimeText" Text="{Binding DateTimeText}" Foreground="White" FontSize="11" Margin="0,0,5,0"/>
                 </StackPanel>
             </Grid>
         </Border>

@@ -1,9 +1,14 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Globalization;
+using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Xml;
+using UTF.Core.Persistence;
 using System.Threading;
 using System.Threading.Tasks;
 using UTF.Logging;
@@ -15,20 +20,20 @@ namespace UTF.Reporting;
 /// </summary>
 public sealed class ReportGenerator : IReportGenerator, IDisposable
 {
-    private readonly Dictionary<string, ReportTemplate> _templates = new();
+    private readonly ConcurrentDictionary<string, ReportTemplate> _templates = new();
     private readonly UTF.Logging.ILogger? _logger;
+    private readonly ITestResultRepository? _resultRepository;
     private bool _disposed = false;
 
-    public ReportGenerator(UTF.Logging.ILogger? logger = null)
+    public ReportGenerator(UTF.Logging.ILogger? logger = null, ITestResultRepository? resultRepository = null)
     {
         _logger = logger;
+        _resultRepository = resultRepository;
         InitializeDefaultTemplates();
     }
 
     public IReadOnlyList<ReportFormat> SupportedFormats => new[]
     {
-        ReportFormat.PDF,
-        ReportFormat.Excel,
         ReportFormat.HTML,
         ReportFormat.CSV,
         ReportFormat.JSON,
@@ -253,6 +258,10 @@ public sealed class ReportGenerator : IReportGenerator, IDisposable
             
             return result;
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             var generationTime = DateTime.UtcNow - startTime;
@@ -263,61 +272,79 @@ public sealed class ReportGenerator : IReportGenerator, IDisposable
 
     private async Task<ReportDataSet> GenerateDataSetAsync(ReportConfiguration configuration, CancellationToken cancellationToken)
     {
-        await Task.Delay(500, cancellationToken); // 模拟数据获取过程
-        
+        if (_resultRepository == null)
+        {
+            throw new InvalidOperationException(
+                "No test-result repository is configured. Use GenerateReportFromTemplateAsync with an explicit data set.");
+        }
+
+        var dutId = configuration.Filters.TryGetValue("DutId", out var dutFilter)
+            ? dutFilter?.ToString()
+            : null;
+        bool? passedFilterValue = null;
+        if (configuration.Filters.TryGetValue("Passed", out var passedFilter) &&
+            bool.TryParse(passedFilter?.ToString(), out var parsedPassed))
+        {
+            passedFilterValue = parsedPassed;
+        }
+
+        var reports = (await _resultRepository.QueryAsync(new TestResultQuery(
+            DutId: dutId,
+            StartDate: configuration.DateRangeStart,
+            EndDate: configuration.DateRangeEnd,
+            Passed: passedFilterValue,
+            Take: 10_000), cancellationToken).ConfigureAwait(false)).ToList();
+
+        var rows = reports.Select(report => new Dictionary<string, object>
+        {
+            ["SessionId"] = report.TaskId,
+            ["DUTId"] = report.DUTId,
+            ["TestResult"] = report.OverallResult ? "PASS" : "FAIL",
+            ["ExecutionTime"] = report.TotalExecutionTime,
+            ["Timestamp"] = report.StartTime
+        }).ToList();
+
         var dataSet = new ReportDataSet
         {
             Name = configuration.ReportName,
             Description = $"数据集为 {configuration.ReportName}",
             Columns = new List<string> { "SessionId", "DUTId", "TestResult", "ExecutionTime", "Timestamp" },
-            Rows = new List<Dictionary<string, object>>(),
+            Rows = rows,
             Metadata = new Dictionary<string, object>
             {
                 { "GeneratedAt", DateTime.UtcNow },
                 { "ReportType", configuration.ReportType },
-                { "DataSource", "TestDatabase" }
+                { "DataSource", nameof(ITestResultRepository) }
             }
         };
-        
-        // 生成模拟数据
-        var random = new Random();
-        for (int i = 0; i < 100; i++)
-        {
-            var row = new Dictionary<string, object>
-            {
-                { "SessionId", $"SESSION_{i / 10 + 1:D3}" },
-                { "DUTId", $"DUT_{i % 10 + 1:D3}" },
-                { "TestResult", random.Next(100) < 85 ? "PASS" : "FAIL" },
-                { "ExecutionTime", TimeSpan.FromSeconds(random.Next(30, 300)) },
-                { "Timestamp", DateTime.UtcNow.AddHours(-random.Next(0, 168)) }
-            };
-            dataSet.Rows.Add(row);
-        }
-        
-        // 添加数据项
+
+        // 基于真实行计算汇总项；无数据时为 0
+        var total = rows.Count;
+        var passed = rows.Count(r => r.TryGetValue("TestResult", out var v) && v?.ToString() == "PASS");
+        var failed = rows.Count(r => r.TryGetValue("TestResult", out var v) && v?.ToString() == "FAIL");
+        var passRate = total > 0 ? Math.Round((double)passed / total * 100, 2) : 0;
+
         dataSet.DataItems.AddRange(new[]
         {
-            new ReportDataItem { Name = "TotalTests", Value = dataSet.Rows.Count, DataType = "int", Category = "Summary" },
-            new ReportDataItem { Name = "PassedTests", Value = dataSet.Rows.Count(r => r["TestResult"].ToString() == "PASS"), DataType = "int", Category = "Summary" },
-            new ReportDataItem { Name = "FailedTests", Value = dataSet.Rows.Count(r => r["TestResult"].ToString() == "FAIL"), DataType = "int", Category = "Summary" },
-            new ReportDataItem { Name = "PassRate", Value = Math.Round((double)dataSet.Rows.Count(r => r["TestResult"].ToString() == "PASS") / dataSet.Rows.Count * 100, 2), DataType = "double", Unit = "%", Category = "Summary" }
+            new ReportDataItem { Name = "TotalTests", Value = total, DataType = "int", Category = "Summary" },
+            new ReportDataItem { Name = "PassedTests", Value = passed, DataType = "int", Category = "Summary" },
+            new ReportDataItem { Name = "FailedTests", Value = failed, DataType = "int", Category = "Summary" },
+            new ReportDataItem { Name = "PassRate", Value = passRate, DataType = "double", Unit = "%", Category = "Summary" }
         });
-        
+
         return dataSet;
     }
 
-    private async Task<ReportTemplate?> GetTemplateAsync(string? templateId, ReportType reportType)
+    private Task<ReportTemplate?> GetTemplateAsync(string? templateId, ReportType reportType)
     {
-        await Task.Delay(100); // 模拟模板获取
-        
         if (!string.IsNullOrEmpty(templateId) && _templates.TryGetValue(templateId, out var template))
         {
-            return template;
+            return Task.FromResult<ReportTemplate?>(template);
         }
-        
+
         // 根据报告类型查找默认模板
         var defaultTemplate = _templates.Values.FirstOrDefault(t => t.ReportType == reportType);
-        return defaultTemplate;
+        return Task.FromResult<ReportTemplate?>(defaultTemplate);
     }
 
     public async Task<ReportGenerationResult> GenerateReportFromTemplateAsync(ReportTemplate template, ReportDataSet dataSet, ReportFormat format, string outputPath, CancellationToken cancellationToken = default)
@@ -340,8 +367,26 @@ public sealed class ReportGenerator : IReportGenerator, IDisposable
                 _ => throw new NotSupportedException($"不支持的报告格式: {format}")
             };
             
-            // 保存报告文件
-            await File.WriteAllTextAsync(outputPath, content, Encoding.UTF8, cancellationToken);
+            var fullOutputPath = Path.GetFullPath(outputPath);
+            var outputDirectory = Path.GetDirectoryName(fullOutputPath)!;
+            Directory.CreateDirectory(outputDirectory);
+            var temporaryPath = Path.Combine(outputDirectory, $".{Path.GetFileName(fullOutputPath)}.{Guid.NewGuid():N}.tmp");
+            try
+            {
+                await File.WriteAllTextAsync(temporaryPath, content, Encoding.UTF8, cancellationToken);
+                File.Move(temporaryPath, fullOutputPath, overwrite: true);
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+                }
+                catch
+                {
+                    // Do not mask a report generation failure.
+                }
+            }
             
             var fileInfo = new FileInfo(outputPath);
             var generationTime = DateTime.UtcNow - startTime;
@@ -349,6 +394,10 @@ public sealed class ReportGenerator : IReportGenerator, IDisposable
             _logger?.Info($"报告文件已保存: {outputPath}, 大小: {fileInfo.Length} 字节");
             
             return ReportGenerationResult.CreateSuccess(outputPath, fileInfo.Length, generationTime);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -358,164 +407,115 @@ public sealed class ReportGenerator : IReportGenerator, IDisposable
         }
     }
 
-    private async Task<string> GenerateHtmlReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
+    private Task<string> GenerateHtmlReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
     {
-        await Task.Delay(200, cancellationToken); // 模拟HTML生成过程
-        
         var html = template.Content;
-        
+
         // 替换数据绑定
         foreach (var binding in template.DataBindings)
         {
             var placeholder = $"{{{{{binding.Key}}}}}";
-            var value = GetDataValue(dataSet, binding.Value)?.ToString() ?? "";
+            var value = HtmlEncode(GetDataValue(dataSet, binding.Value));
             html = html.Replace(placeholder, value);
         }
-        
+
         // 替换基本统计信息
         var totalTests = dataSet.DataItems.FirstOrDefault(i => i.Name == "TotalTests")?.Value?.ToString() ?? "0";
         var passedTests = dataSet.DataItems.FirstOrDefault(i => i.Name == "PassedTests")?.Value?.ToString() ?? "0";
         var failedTests = dataSet.DataItems.FirstOrDefault(i => i.Name == "FailedTests")?.Value?.ToString() ?? "0";
         var passRate = dataSet.DataItems.FirstOrDefault(i => i.Name == "PassRate")?.Value?.ToString() ?? "0";
-        
-        html = html.Replace("{{SessionId}}", "SESSION_001")
+
+        // 从数据集元数据绑定会话级占位符；缺省时省略（替换为空）以避免遗留占位符
+        var sessionId = dataSet.Metadata.TryGetValue("SessionId", out var sid) ? sid?.ToString() ?? string.Empty : string.Empty;
+        var executionTime = dataSet.Metadata.TryGetValue("ExecutionTime", out var et) ? et?.ToString() ?? string.Empty : string.Empty;
+
+        html = html.Replace("{{SessionId}}", HtmlEncode(sessionId))
                   .Replace("{{TestTime}}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"))
                   .Replace("{{Operator}}", "System")
                   .Replace("{{TotalTests}}", totalTests)
                   .Replace("{{PassedTests}}", passedTests)
                   .Replace("{{FailedTests}}", failedTests)
                   .Replace("{{PassRate}}", passRate)
-                  .Replace("{{ExecutionTime}}", "00:15:30");
-        
-        // 生成测试结果表格
-        var resultsHtml = new StringBuilder();
-        foreach (var row in dataSet.Rows.Take(20)) // 只显示前20行
+                  .Replace("{{ExecutionTime}}", HtmlEncode(executionTime));
+
+        // 在 {{#TestResults}}...{{/TestResults}} 标记处定向插入结果行；
+        // 不再使用 html.Replace("<tr>", ...)（会误替换表头与所有 <tr>）。
+        html = ReplaceTestResultsBlock(html, dataSet);
+
+        return Task.FromResult(html);
+    }
+
+    /// <summary>
+    /// 将模板中 <c>{{#TestResults}}...{{/TestResults}}</c> 包围的行模板替换为
+    /// 数据集中每行展开后的 HTML，并移除标记本身。行模板内的占位符
+    /// （<c>{{DUTId}}</c>、<c>{{StepName}}</c>、<c>{{Result}}</c>、
+    /// <c>{{MeasuredValue}}</c>、<c>{{ExpectedValue}}</c>、<c>{{ExecutionTime}}</c>）
+    /// 会按行数据填充；行中缺失的字段以空串填充。
+    /// </summary>
+    private string ReplaceTestResultsBlock(string html, ReportDataSet dataSet)
+    {
+        const string startMarker = "{{#TestResults}}";
+        const string endMarker = "{{/TestResults}}";
+
+        var startIdx = html.IndexOf(startMarker, StringComparison.Ordinal);
+        var endIdx = html.IndexOf(endMarker, StringComparison.Ordinal);
+        if (startIdx < 0 || endIdx < 0 || endIdx < startIdx)
         {
-            var resultClass = row["TestResult"].ToString() == "PASS" ? "passed" : "failed";
-            resultsHtml.AppendLine($@"
-            <tr>
-                <td>{row["DUTId"]}</td>
-                <td>测试步骤_{row["DUTId"]}</td>
-                <td class='{resultClass}'>{row["TestResult"]}</td>
-                <td>5.02V</td>
-                <td>5.00V</td>
-                <td>{row["ExecutionTime"]}</td>
-            </tr>");
+            // 模板未包含标记：直接返回
+            return html;
         }
-        
-        html = html.Replace("{{#TestResults}}", "").Replace("{{/TestResults}}", "");
-        html = html.Replace("<tr>", resultsHtml.ToString());
-        
-        return html;
-    }
 
-    private async Task<string> GeneratePdfReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
-    {
-        await Task.Delay(500, cancellationToken); // 模拟PDF生成过程
-        
-        // 这里应该使用PDF生成库（如iTextSharp）来生成实际的PDF内容
-        // 目前返回PDF的文本表示
-        var pdfContent = $@"%PDF-1.4
-1 0 obj
-<<
-/Type /Catalog
-/Pages 2 0 R
->>
-endobj
+        // 行模板位于标记之间（不含标记本身）
+        var rowTemplate = html.Substring(startIdx + startMarker.Length, endIdx - (startIdx + startMarker.Length));
 
-2 0 obj
-<<
-/Type /Pages
-/Kids [3 0 R]
-/Count 1
->>
-endobj
-
-3 0 obj
-<<
-/Type /Page
-/Parent 2 0 R
-/MediaBox [0 0 612 792]
-/Contents 4 0 R
->>
-endobj
-
-4 0 obj
-<<
-/Length 200
->>
-stream
-BT
-/F1 12 Tf
-100 700 Td
-(测试报告) Tj
-0 -20 Td
-(总测试数: {dataSet.DataItems.FirstOrDefault(i => i.Name == "TotalTests")?.Value}) Tj
-0 -20 Td
-(通过测试: {dataSet.DataItems.FirstOrDefault(i => i.Name == "PassedTests")?.Value}) Tj
-0 -20 Td
-(失败测试: {dataSet.DataItems.FirstOrDefault(i => i.Name == "FailedTests")?.Value}) Tj
-ET
-endstream
-endobj
-
-xref
-0 5
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000206 00000 n 
-trailer
-<<
-/Size 5
-/Root 1 0 R
->>
-startxref
-456
-%%EOF";
-        
-        return pdfContent;
-    }
-
-    private async Task<string> GenerateExcelReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
-    {
-        await Task.Delay(300, cancellationToken); // 模拟Excel生成过程
-        
-        // 这里应该使用Excel生成库（如EPPlus）来生成实际的Excel内容
-        // 目前返回CSV格式作为Excel的简化版本
-        var csv = new StringBuilder();
-        csv.AppendLine(string.Join(",", dataSet.Columns));
-        
+        var rowsHtml = new StringBuilder();
         foreach (var row in dataSet.Rows)
         {
-            var values = dataSet.Columns.Select(col => row.TryGetValue(col, out var value) ? value?.ToString() ?? "" : "");
-            csv.AppendLine(string.Join(",", values));
+            var resultClass = row.TryGetValue("TestResult", out var r) && r?.ToString() == "PASS" ? "passed" : "failed";
+            var rowHtml = rowTemplate
+                .Replace("{{DUTId}}", HtmlEncode(row.TryGetValue("DUTId", out var dutId) ? dutId : null))
+                .Replace("{{StepName}}", HtmlEncode(row.TryGetValue("StepName", out var stepName) ? stepName : null))
+                .Replace("{{Result}}", HtmlEncode(row.TryGetValue("TestResult", out var result) ? result : null))
+                .Replace("{{ResultClass}}", resultClass)
+                .Replace("{{MeasuredValue}}", HtmlEncode(row.TryGetValue("MeasuredValue", out var mv) ? mv : null))
+                .Replace("{{ExpectedValue}}", HtmlEncode(row.TryGetValue("ExpectedValue", out var ev) ? ev : null))
+                .Replace("{{ExecutionTime}}", HtmlEncode(row.TryGetValue("ExecutionTime", out var execTime) ? execTime : null));
+            rowsHtml.Append(rowHtml);
         }
-        
-        return csv.ToString();
+
+        // 用展开后的行替换整个标记块（含起止标记）
+        return html.Substring(0, startIdx) + rowsHtml + html.Substring(endIdx + endMarker.Length);
     }
 
-    private async Task<string> GenerateCsvReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
+    private Task<string> GeneratePdfReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
     {
-        await Task.Delay(100, cancellationToken); // 模拟CSV生成过程
-        
+        // PDF 生成未实现：当前未集成 PDF 生成库（QuestPDF 等）。
+        // 如需 PDF，请先生成 HTML 再用外部工具转换，或在本类型中接入 PDF 库。
+        throw new NotSupportedException("PDF generation not yet implemented; use HTML/CSV");
+    }
+
+    private Task<string> GenerateExcelReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
+    {
+        throw new NotSupportedException("Excel generation is not implemented; use CSV or HTML.");
+    }
+
+    private Task<string> GenerateCsvReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
+    {
         var csv = new StringBuilder();
-        csv.AppendLine(string.Join(",", dataSet.Columns));
-        
+        csv.AppendLine(string.Join(",", dataSet.Columns.Select(EscapeCsvValue)));
+
         foreach (var row in dataSet.Rows)
         {
-            var values = dataSet.Columns.Select(col => row.TryGetValue(col, out var value) ? value?.ToString() ?? "" : "");
+            var values = dataSet.Columns.Select(col =>
+                EscapeCsvValue(row.TryGetValue(col, out var value) ? value : null));
             csv.AppendLine(string.Join(",", values));
         }
-        
-        return csv.ToString();
+
+        return Task.FromResult(csv.ToString());
     }
 
-    private async Task<string> GenerateJsonReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
+    private Task<string> GenerateJsonReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
     {
-        await Task.Delay(150, cancellationToken); // 模拟JSON生成过程
-        
         var reportData = new
         {
             ReportInfo = new
@@ -529,61 +529,81 @@ startxref
             Data = dataSet.Rows,
             Metadata = dataSet.Metadata
         };
-        
-        return JsonSerializer.Serialize(reportData, new JsonSerializerOptions 
-        { 
+
+        return Task.FromResult(JsonSerializer.Serialize(reportData, new JsonSerializerOptions
+        {
             WriteIndented = true,
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-        });
+        }));
     }
 
-    private async Task<string> GenerateXmlReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
+    private Task<string> GenerateXmlReportAsync(ReportTemplate template, ReportDataSet dataSet, CancellationToken cancellationToken)
     {
-        await Task.Delay(200, cancellationToken); // 模拟XML生成过程
-        
         var xml = new StringBuilder();
-        xml.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-        xml.AppendLine("<TestReport>");
-        xml.AppendLine($"  <ReportInfo>");
-        xml.AppendLine($"    <Name>{template.Name}</Name>");
-        xml.AppendLine($"    <GeneratedAt>{DateTime.UtcNow:yyyy-MM-ddTHH:mm:ss}</GeneratedAt>");
-        xml.AppendLine($"    <Template>{template.TemplateId}</Template>");
-        xml.AppendLine($"  </ReportInfo>");
-        
-        xml.AppendLine("  <Summary>");
+        using var writer = XmlWriter.Create(xml, new XmlWriterSettings { Indent = true, OmitXmlDeclaration = true });
+        writer.WriteStartElement("TestReport");
+        writer.WriteStartElement("ReportInfo");
+        writer.WriteElementString("Name", template.Name);
+        writer.WriteElementString("GeneratedAt", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        writer.WriteElementString("Template", template.TemplateId);
+        writer.WriteEndElement();
+        writer.WriteStartElement("Summary");
         foreach (var item in dataSet.DataItems)
         {
-            xml.AppendLine($"    <{item.Name}>{item.Value}</{item.Name}>");
+            writer.WriteStartElement("Item");
+            writer.WriteAttributeString("name", item.Name);
+            writer.WriteString(FormatValue(item.Value));
+            writer.WriteEndElement();
         }
-        xml.AppendLine("  </Summary>");
-        
-        xml.AppendLine("  <TestResults>");
+        writer.WriteEndElement();
+        writer.WriteStartElement("TestResults");
         foreach (var row in dataSet.Rows)
         {
-            xml.AppendLine("    <TestResult>");
+            writer.WriteStartElement("TestResult");
             foreach (var column in dataSet.Columns)
             {
-                var value = row.TryGetValue(column, out var val) ? val?.ToString() ?? "" : "";
-                xml.AppendLine($"      <{column}>{value}</{column}>");
+                writer.WriteStartElement("Field");
+                writer.WriteAttributeString("name", column);
+                writer.WriteString(FormatValue(row.TryGetValue(column, out var value) ? value : null));
+                writer.WriteEndElement();
             }
-            xml.AppendLine("    </TestResult>");
+            writer.WriteEndElement();
         }
-        xml.AppendLine("  </TestResults>");
-        
-        xml.AppendLine("</TestReport>");
-        
-        return xml.ToString();
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+        writer.Flush();
+        return Task.FromResult(xml.ToString());
+    }
+
+    private static string HtmlEncode(object? value) => WebUtility.HtmlEncode(FormatValue(value));
+
+    private static string FormatValue(object? value) => value switch
+    {
+        null => string.Empty,
+        IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty,
+        _ => value.ToString() ?? string.Empty
+    };
+
+    private static string EscapeCsvValue(object? value)
+    {
+        var text = FormatValue(value);
+        if (text.Length > 0 && text[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
+        {
+            text = "'" + text;
+        }
+
+        return $"\"{text.Replace("\"", "\"\"")}\"";
     }
 
     private object? GetDataValue(ReportDataSet dataSet, string path)
     {
-        // 简单的数据路径解析
+        // 数据路径解析：优先从数据集元数据与既有结构中取值，避免硬编码伪造值
         return path switch
         {
-            "session" => "SESSION_001",
+            "session" => dataSet.Metadata.TryGetValue("SessionId", out var sid) ? sid : dataSet.Name,
             "results" => dataSet.Rows,
             "statistics" => dataSet.DataItems,
-            "devices" => new[] { "DUT_001", "DUT_002", "DUT_003" },
+            "devices" => dataSet.Metadata.TryGetValue("Devices", out var devices) ? devices : null,
             _ => null
         };
     }
@@ -606,6 +626,10 @@ startxref
             
             return result;
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger?.Error($"生成报告预览失败: {ex.Message}");
@@ -613,28 +637,26 @@ startxref
         }
     }
 
-    public async Task<bool> ValidateConfigurationAsync(ReportConfiguration configuration, CancellationToken cancellationToken = default)
+    public Task<bool> ValidateConfigurationAsync(ReportConfiguration configuration, CancellationToken cancellationToken = default)
     {
-        await Task.Delay(50, cancellationToken); // 模拟验证过程
-        
         if (string.IsNullOrWhiteSpace(configuration.ReportName))
         {
             _logger?.Warning("报告名称不能为空");
-            return false;
+            return Task.FromResult(false);
         }
-        
+
         if (string.IsNullOrWhiteSpace(configuration.OutputPath))
         {
             _logger?.Warning("输出路径不能为空");
-            return false;
+            return Task.FromResult(false);
         }
-        
+
         if (!SupportedFormats.Contains(configuration.OutputFormat))
         {
             _logger?.Warning($"不支持的报告格式: {configuration.OutputFormat}");
-            return false;
+            return Task.FromResult(false);
         }
-        
+
         // 验证输出目录是否存在
         var directory = Path.GetDirectoryName(configuration.OutputPath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
@@ -646,87 +668,80 @@ startxref
             catch (Exception ex)
             {
                 _logger?.Error($"创建输出目录失败: {ex.Message}");
-                return false;
+                return Task.FromResult(false);
             }
         }
-        
-        return true;
+
+        return Task.FromResult(true);
     }
 
-    public async Task<List<ReportTemplate>> GetAvailableTemplatesAsync(ReportType? reportType = null, CancellationToken cancellationToken = default)
+    public Task<List<ReportTemplate>> GetAvailableTemplatesAsync(ReportType? reportType = null, CancellationToken cancellationToken = default)
     {
-        await Task.Delay(100, cancellationToken); // 模拟模板查询
-        
         var templates = _templates.Values.AsEnumerable();
-        
+
         if (reportType.HasValue)
         {
             templates = templates.Where(t => t.ReportType == reportType.Value);
         }
-        
-        return templates.ToList();
+
+        return Task.FromResult(templates.ToList());
     }
 
-    public async Task<bool> CreateTemplateAsync(ReportTemplate template, CancellationToken cancellationToken = default)
+    public Task<bool> CreateTemplateAsync(ReportTemplate template, CancellationToken cancellationToken = default)
     {
         try
         {
             if (_templates.ContainsKey(template.TemplateId))
             {
                 _logger?.Warning($"模板已存在: {template.TemplateId}");
-                return false;
+                return Task.FromResult(false);
             }
-            
+
             _templates[template.TemplateId] = template;
-            
+
             _logger?.Info($"创建报告模板成功: {template.TemplateId}");
-            await Task.Delay(100, cancellationToken);
-            
-            return true;
+            return Task.FromResult(true);
         }
         catch (Exception ex)
         {
             _logger?.Error($"创建报告模板失败: {ex.Message}");
-            return false;
+            return Task.FromResult(false);
         }
     }
 
-    public async Task<bool> UpdateTemplateAsync(ReportTemplate template, CancellationToken cancellationToken = default)
+    public Task<bool> UpdateTemplateAsync(ReportTemplate template, CancellationToken cancellationToken = default)
     {
         try
         {
             _templates[template.TemplateId] = template;
-            
+
             _logger?.Info($"更新报告模板成功: {template.TemplateId}");
-            await Task.Delay(100, cancellationToken);
-            
-            return true;
+            return Task.FromResult(true);
         }
         catch (Exception ex)
         {
             _logger?.Error($"更新报告模板失败: {ex.Message}");
-            return false;
+            return Task.FromResult(false);
         }
     }
 
-    public async Task<bool> DeleteTemplateAsync(string templateId, CancellationToken cancellationToken = default)
+    public Task<bool> DeleteTemplateAsync(string templateId, CancellationToken cancellationToken = default)
     {
         try
         {
-            if (_templates.Remove(templateId))
+            if (_templates.TryRemove(templateId, out _))
             {
                 _logger?.Info($"删除报告模板成功: {templateId}");
-                await Task.Delay(50, cancellationToken);
-                return true;
+                return Task.FromResult(true);
             }
-            
+
             _logger?.Warning($"模板不存在: {templateId}");
-            return false;
+            return Task.FromResult(false);
         }
         catch (Exception ex)
         {
             _logger?.Error($"删除报告模板失败: {ex.Message}");
-            return false;
+            return Task.FromResult(false);
         }
     }
 
@@ -793,8 +808,10 @@ startxref
     {
         if (!_disposed)
         {
+            // 仅持有托管模板字典，无未托管资源；清空后通知终结器跳过
             _templates.Clear();
             _disposed = true;
+            GC.SuppressFinalize(this);
         }
     }
 }

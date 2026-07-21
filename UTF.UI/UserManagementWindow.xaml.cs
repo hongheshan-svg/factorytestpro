@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using UTF.UI.Models;
 using UTF.UI.Services;
 
 namespace UTF.UI;
@@ -28,10 +29,17 @@ public partial class UserManagementWindow : Window
     {
         // 设置当前用户信息
         CurrentUserText.Text = _permissionManager.CurrentUser?.DisplayName ?? "未知用户";
-        
+
         // 检查权限
         CheckPermissions();
-        
+
+        // P2-14: toolbar actions that only show "正在开发中" dialogs are disabled with a tooltip.
+        const string tooltip = "尚未实现 / Not yet implemented";
+        AddUserBtn.IsEnabled = false;
+        AddUserBtn.ToolTip = tooltip;
+        ExportUsersBtn.IsEnabled = false;
+        ExportUsersBtn.ToolTip = tooltip;
+
         StatusTextBlock.Text = "用户管理系统已就绪";
     }
     
@@ -119,11 +127,11 @@ public partial class UserManagementWindow : Window
             MessageBox.Show("您没有用户管理权限", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        
-        // TODO: 打开添加用户对话框
-        MessageBox.Show("添加用户功能正在开发中", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+
+        // P2-14: not yet implemented — no TODO dialog; surface as status text.
+        StatusTextBlock.Text = "添加用户功能尚未实现";
     }
-    
+
     private void ExportUsersBtn_Click(object sender, RoutedEventArgs e)
     {
         if (!_permissionManager.HasPermission(Permission.UserManagement))
@@ -131,8 +139,9 @@ public partial class UserManagementWindow : Window
             MessageBox.Show("您没有用户管理权限", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        
-        MessageBox.Show("导出用户功能正在开发中", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+
+        // P2-14: not yet implemented.
+        StatusTextBlock.Text = "导出用户功能尚未实现";
     }
     
     // 筛选事件处理
@@ -164,7 +173,8 @@ public partial class UserManagementWindow : Window
         
         if (sender is Button button && button.DataContext is UserDisplayInfo user)
         {
-            MessageBox.Show($"编辑用户: {user.DisplayName}", "编辑用户", MessageBoxButton.OK, MessageBoxImage.Information);
+            // P2-14: not yet implemented — no TODO dialog.
+            StatusTextBlock.Text = $"编辑用户 {user.DisplayName} 功能尚未实现";
         }
     }
     
@@ -197,20 +207,20 @@ public partial class UserManagementWindow : Window
             
             if (result == MessageBoxResult.Yes)
             {
-                MessageBox.Show("密码重置成功！", "操作成功", MessageBoxButton.OK, MessageBoxImage.Information);
-                StatusTextBlock.Text = $"已重置用户 {user.DisplayName} 的密码";
+                // P2-14: not yet implemented — no TODO dialog.
+                StatusTextBlock.Text = "密码重置功能尚未实现";
             }
         }
     }
     
-    private void DisableUser_Click(object sender, RoutedEventArgs e)
+    private async void DisableUser_Click(object sender, RoutedEventArgs e)
     {
         if (!_permissionManager.HasPermission(Permission.UserManagement))
         {
             MessageBox.Show("您没有用户管理权限", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        
+
         if (sender is Button button && button.DataContext is UserDisplayInfo user)
         {
             if (user.Username.ToLowerInvariant() == "admin")
@@ -218,18 +228,28 @@ public partial class UserManagementWindow : Window
                 MessageBox.Show("不能禁用默认管理员账户", "操作失败", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-            
+
             var action = user.IsActive ? "禁用" : "启用";
-            var result = MessageBox.Show($"确定要{action}用户 {user.DisplayName} 吗？", 
+            var result = MessageBox.Show($"确定要{action}用户 {user.DisplayName} 吗？",
                 $"确认{action}", MessageBoxButton.YesNo, MessageBoxImage.Question);
-            
+
             if (result == MessageBoxResult.Yes)
             {
-                user.IsActive = !user.IsActive;
-                user.StatusDisplayName = user.IsActive ? "活跃" : "禁用";
-                UserDataGrid.Items.Refresh();
-                UpdateUserCount();
-                StatusTextBlock.Text = $"已{action}用户 {user.DisplayName}";
+                // P4-36: persist the active state via IPermissionManager instead of mutating the in-memory model only.
+                var newActive = !user.IsActive;
+                var ok = await _permissionManager.SetUserActiveAsync(user.Username, newActive);
+                if (ok)
+                {
+                    user.IsActive = newActive;
+                    user.StatusDisplayName = user.IsActive ? "活跃" : "禁用";
+                    UserDataGrid.Items.Refresh();
+                    UpdateUserCount();
+                    StatusTextBlock.Text = $"已{action}用户 {user.DisplayName}";
+                }
+                else
+                {
+                    MessageBox.Show($"{action}用户失败", "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
         }
     }
@@ -255,7 +275,8 @@ public partial class UserManagementWindow : Window
             
             if (result == MessageBoxResult.Yes)
             {
-                MessageBox.Show("删除用户功能正在开发中", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                // P2-14: not yet implemented — no TODO dialog.
+                StatusTextBlock.Text = "删除用户功能尚未实现";
             }
         }
     }
@@ -275,21 +296,3 @@ public partial class UserManagementWindow : Window
     }
 }
 
-/// <summary>
-/// 用户显示信息
-/// </summary>
-public class UserDisplayInfo
-{
-    public string Username { get; set; } = "";
-    public string DisplayName { get; set; } = "";
-    public string Email { get; set; } = "";
-    public UserRole Role { get; set; }
-    public string RoleDisplayName { get; set; } = "";
-    public bool IsActive { get; set; }
-    public string StatusDisplayName { get; set; } = "";
-    public DateTime CreatedAt { get; set; }
-    public string CreatedAtDisplayName { get; set; } = "";
-    public DateTime LastLoginAt { get; set; }
-    public string LastLoginDisplayName { get; set; } = "";
-    public List<Permission> Permissions { get; set; } = new();
-}

@@ -19,6 +19,14 @@ public interface IPermissionManager
     /// </summary>
     Task<LoginResult> LoginAsync(string username, string password);
 
+    /// <summary>Returns whether at least one account exists.</summary>
+    Task<bool> HasUsersAsync();
+
+    /// <summary>
+    /// Creates the first administrator account. This operation is rejected once any account exists.
+    /// </summary>
+    Task<bool> BootstrapAdminAsync(string username, string password, string displayName);
+
     /// <summary>
     /// 用户登出
     /// </summary>
@@ -53,6 +61,14 @@ public interface IPermissionManager
     /// 删除用户
     /// </summary>
     Task<bool> DeleteUserAsync(string username);
+
+    /// <summary>
+    /// 启用或禁用指定用户（持久化）。默认管理员账户不可禁用。
+    /// </summary>
+    /// <param name="username">用户名。</param>
+    /// <param name="isActive">true=启用，false=禁用。</param>
+    /// <returns>操作是否成功。</returns>
+    Task<bool> SetUserActiveAsync(string username, bool isActive);
 
     /// <summary>
     /// 权限变更事件

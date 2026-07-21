@@ -16,13 +16,13 @@ namespace UTF.Logging
         public void LogError(string message) => Console.WriteLine($"[ERROR] {DateTime.Now:HH:mm:ss} {message}");
         public void LogCritical(string message) => Console.WriteLine($"[CRITICAL] {DateTime.Now:HH:mm:ss} {message}");
 
-        public void Debug(string message, string? category = null, Dictionary<string, object>? properties = null) => LogDebug(message);
-        public void Info(string message, string? category = null, Dictionary<string, object>? properties = null) => LogInfo(message);
-        public void Warning(string message, string? category = null, Dictionary<string, object>? properties = null) => LogWarning(message);
-        public void Error(string message, Exception? exception = null, string? category = null, Dictionary<string, object>? properties = null) => LogError($"{message} {exception?.Message}");
-        public void Critical(string message, Exception? exception = null, string? category = null, Dictionary<string, object>? properties = null) => LogCritical($"{message} {exception?.Message}");
+        public void Debug(string message, string? source = null, Dictionary<string, object>? properties = null) => LogDebug(message);
+        public void Info(string message, string? source = null, Dictionary<string, object>? properties = null) => LogInfo(message);
+        public void Warning(string message, string? source = null, Dictionary<string, object>? properties = null) => LogWarning(message);
+        public void Error(string message, Exception? exception = null, string? source = null, Dictionary<string, object>? properties = null) => LogError($"{message} {exception?.Message}");
+        public void Critical(string message, Exception? exception = null, string? source = null, Dictionary<string, object>? properties = null) => LogCritical($"{message} {exception?.Message}");
 
-        public void Log(LogLevel level, LogCategory category, string message, Exception? exception = null, string? categoryName = null, Dictionary<string, object>? properties = null)
+        public void Log(LogLevel level, LogCategory category, string message, Exception? exception = null, string? source = null, Dictionary<string, object>? properties = null)
         {
             switch (level)
             {
@@ -34,39 +34,45 @@ namespace UTF.Logging
             }
         }
 
-        public Task DebugAsync(string message, string? category = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default)
+        /// <summary>
+        /// 简化日志重载：仅按级别输出消息。错误级别附带异常信息。
+        /// </summary>
+        public void Log(LogLevel level, string message, string? source = null, Exception? exception = null)
+            => Log(level, LogCategory.System, message, exception, source, null);
+
+        public Task DebugAsync(string message, string? source = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default)
         {
             LogDebug(message);
             return Task.CompletedTask;
         }
 
-        public Task InfoAsync(string message, string? category = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default)
+        public Task InfoAsync(string message, string? source = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default)
         {
             LogInfo(message);
             return Task.CompletedTask;
         }
 
-        public Task WarningAsync(string message, string? category = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default)
+        public Task WarningAsync(string message, string? source = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default)
         {
             LogWarning(message);
             return Task.CompletedTask;
         }
 
-        public Task ErrorAsync(string message, Exception? exception = null, string? category = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default)
+        public Task ErrorAsync(string message, Exception? exception = null, string? source = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default)
         {
             LogError($"{message} {exception?.Message}");
             return Task.CompletedTask;
         }
 
-        public Task CriticalAsync(string message, Exception? exception = null, string? category = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default)
+        public Task CriticalAsync(string message, Exception? exception = null, string? source = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default)
         {
             LogCritical($"{message} {exception?.Message}");
             return Task.CompletedTask;
         }
 
-        public Task LogAsync(LogLevel level, LogCategory category, string message, Exception? exception = null, string? categoryName = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default)
+        public Task LogAsync(LogLevel level, LogCategory category, string message, Exception? exception = null, string? source = null, Dictionary<string, object>? properties = null, CancellationToken cancellationToken = default)
         {
-            Log(level, category, message, exception, categoryName, properties);
+            Log(level, category, message, exception, source, properties);
             return Task.CompletedTask;
         }
 

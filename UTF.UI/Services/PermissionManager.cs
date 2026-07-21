@@ -1,369 +1,514 @@
-using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace UTF.UI.Services;
 
-public class PermissionManager : IPermissionManager
+public sealed class PermissionManager : IPermissionManager, IDisposable
 {
     private const string UsersFileName = "users.json";
-    private const string DefaultAdminUsername = "admin";
-    private const string DefaultAdminPassword = "admin123";
+    private const int PasswordIterations = 210_000;
+    private const int SaltSize = 16;
+    private const int HashSize = 32;
+    private const int MaxFailedAttempts = 5;
+    private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(5);
 
     private readonly string _usersFilePath;
-    private readonly Dictionary<string, UserData> _users = new();
+    private readonly ConcurrentDictionary<string, UserData> _users =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, LoginAttemptState> _loginAttempts =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly SemaphoreSlim _fileLock = new(1, 1);
+    private UserInfo? _currentUser;
+    private bool _disposed;
 
-    public UserInfo? CurrentUser { get; private set; }
+    public PermissionManager(string? dataDirectory = null)
+    {
+        var root = dataDirectory ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "UniversalTestFramework");
+        Directory.CreateDirectory(root);
+        _usersFilePath = Path.Combine(root, UsersFileName);
+        LoadUsersSync();
+    }
+
+    public UserInfo? CurrentUser => _currentUser;
 
     public event EventHandler<PermissionChangedEventArgs>? PermissionChanged;
 
-    public PermissionManager(string dataDirectory = "Data")
+    public Task<bool> HasUsersAsync() => Task.FromResult(!_users.IsEmpty);
+
+    public async Task<bool> BootstrapAdminAsync(string username, string password, string displayName)
     {
-        if (!Directory.Exists(dataDirectory))
+        ThrowIfDisposed();
+        if (!_users.IsEmpty || !IsValidUsername(username) || !IsStrongPassword(password))
         {
-            Directory.CreateDirectory(dataDirectory);
+            return false;
         }
 
-        _usersFilePath = Path.Combine(dataDirectory, UsersFileName);
-        InitializeSync();
-    }
-
-    private void InitializeSync()
-    {
-        LoadUsersSync();
-        if (!_users.Any())
+        var key = NormalizeUsername(username);
+        var user = new UserData
         {
-            CreateDefaultAdminSync();
-        }
-    }
-
-    private void LoadUsersSync()
-    {
-        try
-        {
-            if (File.Exists(_usersFilePath))
-            {
-                var json = File.ReadAllText(_usersFilePath);
-                var usersData = JsonSerializer.Deserialize<Dictionary<string, UserData>>(json) ?? new();
-                _users.Clear();
-                foreach (var kvp in usersData)
-                    _users[kvp.Key.ToLowerInvariant()] = kvp.Value;
-            }
-        }
-        catch { }
-    }
-
-    private void CreateDefaultAdminSync()
-    {
-        var userData = new UserData
-        {
-            Username = DefaultAdminUsername,
-            DisplayName = "系统管理员",
-            Email = "admin@utf.com",
-            PasswordHash = HashPassword(DefaultAdminPassword),
+            Username = username.Trim(),
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? username.Trim() : displayName.Trim(),
+            PasswordHash = HashPassword(password),
             Role = UserRole.SuperAdmin,
-            CreatedAt = DateTime.Now,
+            CreatedAt = DateTime.UtcNow,
             IsActive = true
         };
-        _users[DefaultAdminUsername.ToLowerInvariant()] = userData;
+
+        if (!_users.TryAdd(key, user))
+        {
+            return false;
+        }
+
         try
         {
-            var options = new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
-            File.WriteAllText(_usersFilePath, JsonSerializer.Serialize(_users, options));
-        }
-        catch { }
-    }
-
-    public async Task<LoginResult> LoginAsync(string username, string password)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
-            {
-                return new LoginResult
-                {
-                    Success = false,
-                    Message = "用户名和密码不能为空"
-                };
-            }
-
-            if (!_users.TryGetValue(username.ToLowerInvariant(), out var userData))
-            {
-                return new LoginResult
-                {
-                    Success = false,
-                    Message = "用户不存在"
-                };
-            }
-
-            if (!userData.IsActive)
-            {
-                return new LoginResult
-                {
-                    Success = false,
-                    Message = "用户已被禁用"
-                };
-            }
-
-            if (!VerifyPassword(password, userData.PasswordHash))
-            {
-                return new LoginResult
-                {
-                    Success = false,
-                    Message = "密码错误"
-                };
-            }
-
-            userData.LastLoginAt = DateTime.Now;
-            await SaveUsersAsync();
-
-            CurrentUser = ConvertToUserInfo(userData);
-
-            return new LoginResult
-            {
-                Success = true,
-                Message = "登录成功",
-                User = CurrentUser,
-                Token = GenerateToken(userData)
-            };
-        }
-        catch (Exception ex)
-        {
-            return new LoginResult
-            {
-                Success = false,
-                Message = $"登录失败: {ex.Message}"
-            };
-        }
-    }
-
-    public async Task LogoutAsync()
-    {
-        CurrentUser = null;
-        await Task.CompletedTask;
-    }
-
-    public bool HasPermission(Permission permission)
-    {
-        return true;
-    }
-
-    public bool HasRole(UserRole role)
-    {
-        return true;
-    }
-
-    public async Task<IEnumerable<UserInfo>> GetAllUsersAsync()
-    {
-        await LoadUsersAsync();
-        return _users.Values.Select(ConvertToUserInfo).ToList();
-    }
-
-    public async Task<bool> CreateUserAsync(CreateUserRequest request)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
-            {
-                return false;
-            }
-
-            var usernameKey = request.Username.ToLowerInvariant();
-            if (_users.ContainsKey(usernameKey))
-            {
-                return false;
-            }
-
-            var userData = new UserData
-            {
-                Username = request.Username,
-                DisplayName = request.DisplayName,
-                Email = request.Email,
-                PasswordHash = HashPassword(request.Password),
-                Role = request.Role,
-                CustomPermissions = request.CustomPermissions,
-                CreatedAt = DateTime.Now,
-                IsActive = true
-            };
-
-            _users[usernameKey] = userData;
-            await SaveUsersAsync();
-
+            await SaveUsersAsync().ConfigureAwait(false);
             return true;
         }
         catch
         {
+            _users.TryRemove(key, out _);
             return false;
         }
     }
 
-    public async Task<bool> UpdateUserPermissionsAsync(string username, UserRole role, List<Permission> permissions)
+    public async Task<LoginResult> LoginAsync(string username, string password)
     {
+        ThrowIfDisposed();
+        var key = NormalizeUsername(username);
+        if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(password))
+        {
+            return FailedLogin("Invalid username or password.");
+        }
+
+        var attempt = _loginAttempts.GetOrAdd(key, _ => new LoginAttemptState());
+        lock (attempt)
+        {
+            if (attempt.LockedUntilUtc > DateTime.UtcNow)
+            {
+                return FailedLogin("Too many sign-in attempts. Try again later.");
+            }
+        }
+
+        if (!_users.TryGetValue(key, out var user) || !user.IsActive ||
+            !VerifyPassword(password, user.PasswordHash, out var needsRehash))
+        {
+            RegisterFailedAttempt(attempt);
+            return FailedLogin("Invalid username or password.");
+        }
+
+        lock (attempt)
+        {
+            attempt.FailedCount = 0;
+            attempt.LockedUntilUtc = DateTime.MinValue;
+        }
+
+        var previousLogin = user.LastLoginAt;
+        var previousHash = user.PasswordHash;
+        user.LastLoginAt = DateTime.UtcNow;
+        if (needsRehash)
+        {
+            user.PasswordHash = HashPassword(password);
+        }
+
         try
         {
-            var usernameKey = username.ToLowerInvariant();
-            if (!_users.TryGetValue(usernameKey, out var userData))
-            {
-                return false;
-            }
+            await SaveUsersAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            user.LastLoginAt = previousLogin;
+            user.PasswordHash = previousHash;
+            return FailedLogin("The sign-in state could not be saved.");
+        }
 
-            var oldPermissions = GetUserPermissions(userData.Role, userData.CustomPermissions);
+        _currentUser = ConvertToUserInfo(user);
+        return new LoginResult
+        {
+            Success = true,
+            Message = "Sign-in succeeded.",
+            User = _currentUser,
+            Token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+        };
+    }
 
-            userData.Role = role;
-            userData.CustomPermissions = permissions ?? new List<Permission>();
+    public Task LogoutAsync()
+    {
+        _currentUser = null;
+        return Task.CompletedTask;
+    }
 
-            await SaveUsersAsync();
+    public bool HasPermission(Permission permission)
+    {
+        var user = _currentUser;
+        if (user == null)
+        {
+            return permission == Permission.None;
+        }
 
-            var newPermissions = GetUserPermissions(role, permissions ?? new List<Permission>());
-            var userInfo = ConvertToUserInfo(userData);
+        if (user.Role is UserRole.Admin or UserRole.SuperAdmin)
+        {
+            return true;
+        }
 
-            PermissionChanged?.Invoke(this, new PermissionChangedEventArgs(userInfo, oldPermissions, newPermissions));
+        var custom = user.Permissions?.Aggregate(Permission.None, (current, item) => current | item)
+            ?? Permission.None;
+        return (GetRoleDefaultPermissions(user.Role) | custom).HasFlag(permission);
+    }
 
+    public bool HasRole(UserRole role)
+    {
+        var user = _currentUser;
+        if (user == null)
+        {
+            return false;
+        }
+
+        return role is UserRole.Admin or UserRole.SuperAdmin
+            ? user.Role is UserRole.Admin or UserRole.SuperAdmin
+            : user.Role == role;
+    }
+
+    public Task<IEnumerable<UserInfo>> GetAllUsersAsync()
+    {
+        ThrowIfDisposed();
+        if (!HasPermission(Permission.UserManagement))
+        {
+            return Task.FromResult<IEnumerable<UserInfo>>(Array.Empty<UserInfo>());
+        }
+
+        return Task.FromResult<IEnumerable<UserInfo>>(
+            _users.Values.Select(ConvertToUserInfo).OrderBy(user => user.Username).ToList());
+    }
+
+    public async Task<bool> CreateUserAsync(CreateUserRequest request)
+    {
+        ThrowIfDisposed();
+        if (!HasPermission(Permission.UserManagement) || !IsValidUsername(request.Username) ||
+            !IsStrongPassword(request.Password))
+        {
+            return false;
+        }
+
+        var key = NormalizeUsername(request.Username);
+        var user = new UserData
+        {
+            Username = request.Username.Trim(),
+            DisplayName = request.DisplayName.Trim(),
+            Email = request.Email.Trim(),
+            PasswordHash = HashPassword(request.Password),
+            Role = request.Role,
+            CustomPermissions = request.CustomPermissions?.ToList() ?? new List<Permission>(),
+            CreatedAt = DateTime.UtcNow,
+            IsActive = true
+        };
+
+        if (!_users.TryAdd(key, user))
+        {
+            return false;
+        }
+
+        try
+        {
+            await SaveUsersAsync().ConfigureAwait(false);
             return true;
         }
         catch
         {
+            _users.TryRemove(key, out _);
+            return false;
+        }
+    }
+
+    public async Task<bool> UpdateUserPermissionsAsync(
+        string username,
+        UserRole role,
+        List<Permission> permissions)
+    {
+        ThrowIfDisposed();
+        if (!HasPermission(Permission.UserManagement) ||
+            !_users.TryGetValue(NormalizeUsername(username), out var user))
+        {
+            return false;
+        }
+
+        var oldRole = user.Role;
+        var oldCustom = user.CustomPermissions.ToList();
+        var oldPermissions = GetUserPermissions(oldRole, oldCustom);
+        user.Role = role;
+        user.CustomPermissions = permissions?.ToList() ?? new List<Permission>();
+
+        try
+        {
+            await SaveUsersAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            user.Role = oldRole;
+            user.CustomPermissions = oldCustom;
+            return false;
+        }
+
+        var info = ConvertToUserInfo(user);
+        if (string.Equals(_currentUser?.Username, user.Username, StringComparison.OrdinalIgnoreCase))
+        {
+            _currentUser = info;
+        }
+
+        PermissionChanged?.Invoke(this, new PermissionChangedEventArgs(
+            info,
+            oldPermissions,
+            GetUserPermissions(user.Role, user.CustomPermissions)));
+        return true;
+    }
+
+    public async Task<bool> SetUserActiveAsync(string username, bool isActive)
+    {
+        ThrowIfDisposed();
+        if (!HasPermission(Permission.UserManagement) ||
+            !_users.TryGetValue(NormalizeUsername(username), out var user) ||
+            string.Equals(_currentUser?.Username, user.Username, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var previous = user.IsActive;
+        user.IsActive = isActive;
+        try
+        {
+            await SaveUsersAsync().ConfigureAwait(false);
+            return true;
+        }
+        catch
+        {
+            user.IsActive = previous;
             return false;
         }
     }
 
     public async Task<bool> DeleteUserAsync(string username)
     {
+        ThrowIfDisposed();
+        var key = NormalizeUsername(username);
+        if (!HasPermission(Permission.UserManagement) ||
+            string.Equals(_currentUser?.Username, username, StringComparison.OrdinalIgnoreCase) ||
+            !_users.TryGetValue(key, out var user))
+        {
+            return false;
+        }
+
+        if (user.Role == UserRole.SuperAdmin &&
+            _users.Values.Count(item => item.Role == UserRole.SuperAdmin && item.IsActive) <= 1)
+        {
+            return false;
+        }
+
+        if (!_users.TryRemove(key, out var removed))
+        {
+            return false;
+        }
+
         try
         {
-            var usernameKey = username.ToLowerInvariant();
-            if (!_users.ContainsKey(usernameKey))
-            {
-                return false;
-            }
-
-            if (usernameKey == DefaultAdminUsername.ToLowerInvariant())
-            {
-                return false;
-            }
-
-            _users.Remove(usernameKey);
-            await SaveUsersAsync();
-
+            await SaveUsersAsync().ConfigureAwait(false);
             return true;
         }
         catch
         {
+            _users[key] = removed;
             return false;
         }
     }
 
-    private async Task LoadUsersAsync()
+    private void LoadUsersSync()
     {
-        try
+        if (!File.Exists(_usersFilePath))
         {
-            if (File.Exists(_usersFilePath))
-            {
-                var json = await File.ReadAllTextAsync(_usersFilePath);
-                var usersData = JsonSerializer.Deserialize<Dictionary<string, UserData>>(json) ?? new();
-
-                _users.Clear();
-                foreach (var kvp in usersData)
-                {
-                    _users[kvp.Key.ToLowerInvariant()] = kvp.Value;
-                }
-            }
+            return;
         }
-        catch
+
+        var json = File.ReadAllText(_usersFilePath, Encoding.UTF8);
+        var users = JsonSerializer.Deserialize<Dictionary<string, UserData>>(json)
+            ?? throw new InvalidDataException("The user data file is empty or invalid.");
+        foreach (var pair in users)
         {
+            if (!string.IsNullOrWhiteSpace(pair.Value.Username))
+            {
+                _users[NormalizeUsername(pair.Value.Username)] = pair.Value;
+            }
         }
     }
 
     private async Task SaveUsersAsync()
     {
+        await _fileLock.WaitAsync().ConfigureAwait(false);
+        var temporaryPath = _usersFilePath + ".tmp";
         try
         {
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            };
-
-            var json = JsonSerializer.Serialize(_users, options);
-            await File.WriteAllTextAsync(_usersFilePath, json);
+            var snapshot = _users.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+            var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(temporaryPath, json, Encoding.UTF8).ConfigureAwait(false);
+            File.Move(temporaryPath, _usersFilePath, overwrite: true);
         }
-        catch
+        finally
         {
+            TryDelete(temporaryPath);
+            _fileLock.Release();
         }
     }
 
     private static string HashPassword(string password)
     {
-        using var sha256 = SHA256.Create();
-        var salt = "UTF_SALT_2024";
-        var saltedPassword = password + salt;
-        var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(saltedPassword));
-        return Convert.ToBase64String(hashBytes);
+        var salt = RandomNumberGenerator.GetBytes(SaltSize);
+        var hash = Rfc2898DeriveBytes.Pbkdf2(
+            password,
+            salt,
+            PasswordIterations,
+            HashAlgorithmName.SHA256,
+            HashSize);
+        return $"PBKDF2-SHA256${PasswordIterations}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
     }
 
-    private static bool VerifyPassword(string password, string hash)
+    private static bool VerifyPassword(string password, string stored, out bool needsRehash)
     {
-        return HashPassword(password) == hash;
-    }
-
-    private static string GenerateToken(UserData userData)
-    {
-        var tokenData = $"{userData.Username}:{DateTime.Now:yyyyMMddHHmmss}";
-        var tokenBytes = Encoding.UTF8.GetBytes(tokenData);
-        return Convert.ToBase64String(tokenBytes);
-    }
-
-    private static Permission GetUserPermissions(UserRole role, List<Permission> customPermissions)
-    {
-        var rolePermissions = role switch
+        needsRehash = false;
+        var parts = stored.Split('$');
+        if (parts.Length == 4 && string.Equals(parts[0], "PBKDF2-SHA256", StringComparison.Ordinal) &&
+            int.TryParse(parts[1], out var iterations))
         {
-            UserRole.SuperAdmin => Permission.AllPermissions,
-            UserRole.Admin => Permission.AdminPermissions,
-            UserRole.Engineer => Permission.EngineerPermissions,
-            UserRole.Technician => Permission.TechnicianPermissions,
-            UserRole.Operator => Permission.OperatorPermissions,
-            UserRole.Observer => Permission.ObserverPermissions,
-            _ => Permission.None
-        };
-
-        foreach (var permission in customPermissions)
-        {
-            rolePermissions |= permission;
+            try
+            {
+                var salt = Convert.FromBase64String(parts[2]);
+                var expected = Convert.FromBase64String(parts[3]);
+                var actual = Rfc2898DeriveBytes.Pbkdf2(
+                    password,
+                    salt,
+                    iterations,
+                    HashAlgorithmName.SHA256,
+                    expected.Length);
+                needsRehash = iterations < PasswordIterations;
+                return CryptographicOperations.FixedTimeEquals(actual, expected);
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
         }
 
-        return rolePermissions;
+        // One-time compatibility for legacy deterministic SHA-256 hashes.
+        try
+        {
+            var expected = Convert.FromBase64String(stored);
+            var actual = SHA256.HashData(Encoding.UTF8.GetBytes(password + "UTF_SALT_2024"));
+            needsRehash = true;
+            return CryptographicOperations.FixedTimeEquals(actual, expected);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
-    private static UserInfo ConvertToUserInfo(UserData userData)
+    private static Permission GetRoleDefaultPermissions(UserRole role) => role switch
     {
-        return new UserInfo
+        UserRole.SuperAdmin => Permission.AllPermissions,
+        UserRole.Admin => Permission.AdminPermissions,
+        UserRole.Engineer => Permission.EngineerPermissions,
+        UserRole.Technician => Permission.TechnicianPermissions,
+        UserRole.Operator => Permission.OperatorPermissions,
+        UserRole.Observer => Permission.ObserverPermissions,
+        _ => Permission.None
+    };
+
+    private static Permission GetUserPermissions(UserRole role, IEnumerable<Permission> custom) =>
+        custom.Aggregate(GetRoleDefaultPermissions(role), (current, item) => current | item);
+
+    private static UserInfo ConvertToUserInfo(UserData user) => new()
+    {
+        Username = user.Username,
+        DisplayName = user.DisplayName,
+        Email = user.Email,
+        Role = user.Role,
+        Permissions = user.CustomPermissions.ToList(),
+        CreatedAt = user.CreatedAt,
+        LastLoginAt = user.LastLoginAt,
+        IsActive = user.IsActive
+    };
+
+    private static bool IsValidUsername(string username) =>
+        !string.IsNullOrWhiteSpace(username) && username.Trim().Length is >= 3 and <= 64 &&
+        username.All(character => char.IsLetterOrDigit(character) || character is '_' or '-' or '.');
+
+    private static bool IsStrongPassword(string password) =>
+        !string.IsNullOrEmpty(password) && password.Length >= 12;
+
+    private static string NormalizeUsername(string? username) => username?.Trim().ToLowerInvariant() ?? string.Empty;
+
+    private static LoginResult FailedLogin(string message) => new() { Success = false, Message = message };
+
+    private static void RegisterFailedAttempt(LoginAttemptState state)
+    {
+        lock (state)
         {
-            Username = userData.Username,
-            DisplayName = userData.DisplayName,
-            Email = userData.Email,
-            Role = userData.Role,
-            Permissions = userData.CustomPermissions,
-            CreatedAt = userData.CreatedAt,
-            LastLoginAt = userData.LastLoginAt,
-            IsActive = userData.IsActive
-        };
+            state.FailedCount++;
+            if (state.FailedCount >= MaxFailedAttempts)
+            {
+                state.FailedCount = 0;
+                state.LockedUntilUtc = DateTime.UtcNow.Add(LockoutDuration);
+            }
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _fileLock.Dispose();
+        _disposed = true;
+    }
+
+    private sealed class LoginAttemptState
+    {
+        public int FailedCount { get; set; }
+        public DateTime LockedUntilUtc { get; set; }
     }
 }
 
-internal class UserData
+internal sealed class UserData
 {
-    public string Username { get; set; } = "";
-    public string DisplayName { get; set; } = "";
-    public string Email { get; set; } = "";
-    public string PasswordHash { get; set; } = "";
+    public string Username { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string PasswordHash { get; set; } = string.Empty;
     public UserRole Role { get; set; } = UserRole.Operator;
     public List<Permission> CustomPermissions { get; set; } = new();
-    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime LastLoginAt { get; set; } = DateTime.MinValue;
     public bool IsActive { get; set; } = true;
 }

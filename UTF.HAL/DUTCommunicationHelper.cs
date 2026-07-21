@@ -11,6 +11,7 @@ namespace UTF.HAL;
 /// <summary>
 /// DUT通信助手类，支持串口和CMD通信
 /// </summary>
+[Obsolete("Logic moved to UTF.Business step execution / UTF.Plugins.Drivers", error: true)]
 public static class DUTCommunicationHelper
 {
     /// <summary>
@@ -47,7 +48,7 @@ public static class DUTCommunicationHelper
             serialPort.WriteLine(command);
             
             // 读取响应
-            var response = await Task.Run(() => serialPort.ReadLine());
+            var response = await Task.Run(() => serialPort.ReadLine()).ConfigureAwait(false);
             
             return new DUTCommunicationResult
             {
@@ -84,8 +85,8 @@ public static class DUTCommunicationHelper
     /// <param name="timeoutMs">超时时间（毫秒）</param>
     /// <returns>执行结果</returns>
     public static async Task<DUTCommunicationResult> ExecuteCmdCommandAsync(
-        string command, 
-        string workingDirectory = "C:\\", 
+        string command,
+        string? workingDirectory = null,
         int timeoutMs = 30000)
     {
         var startTime = DateTime.UtcNow;
@@ -93,28 +94,37 @@ public static class DUTCommunicationHelper
         try
         {
             using var process = new Process();
-            process.StartInfo = new ProcessStartInfo
+            var startInfo = new ProcessStartInfo
             {
                 FileName = "cmd.exe",
-                Arguments = $"/c {command}",
-                WorkingDirectory = workingDirectory,
-                UseShellExecute = false,
+                // 使用 ArgumentList 逐参数添加，避免手动拼接导致的命令注入。
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("/c");
+            startInfo.ArgumentList.Add(command);
+
+            // 未显式指定工作目录时使用当前进程目录，不再默认 "C:\\"（避免意外写入根盘符）。
+            if (!string.IsNullOrWhiteSpace(workingDirectory))
+            {
+                startInfo.WorkingDirectory = workingDirectory;
+            }
+
+            process.StartInfo = startInfo;
 
             process.Start();
-            
+
             using var cancellationTokenSource = new CancellationTokenSource(timeoutMs);
-            
+
             var outputTask = process.StandardOutput.ReadToEndAsync(cancellationTokenSource.Token);
             var errorTask = process.StandardError.ReadToEndAsync(cancellationTokenSource.Token);
-            
-            await process.WaitForExitAsync(cancellationTokenSource.Token);
-            
-            var output = await outputTask;
-            var error = await errorTask;
+
+            await process.WaitForExitAsync(cancellationTokenSource.Token).ConfigureAwait(false);
+
+            var output = await outputTask.ConfigureAwait(false);
+            var error = await errorTask.ConfigureAwait(false);
             
             var success = process.ExitCode == 0;
             var response = success ? output : error;

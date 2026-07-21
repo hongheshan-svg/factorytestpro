@@ -3,6 +3,8 @@
 日期: 2026-03-10
 状态: 已批准
 
+> **Status: implemented.** 该设计已落地，详见 [docs/architecture-optimization-report.md](../../architecture-optimization-report.md)。
+
 ## 1. 背景与目标
 
 UTF（通用测试框架）当前存在以下架构问题：

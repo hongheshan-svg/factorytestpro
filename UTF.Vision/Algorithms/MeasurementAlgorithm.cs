@@ -74,12 +74,14 @@ namespace UTF.Vision.Algorithms
                 
                 // 获取测量参数
                 var measurementType = parameters.GetValueOrDefault("measurement_type", "distance").ToString();
-                var targetObjects = parameters.GetValueOrDefault("target_objects", null) as List<DetectedObject>;
-                var measurementRegions = parameters.GetValueOrDefault("measurement_regions", null) as List<Rectangle>;
+                parameters.TryGetValue("target_objects", out var targetObjectsValue);
+                var targetObjects = targetObjectsValue as List<DetectedObject>;
+                parameters.TryGetValue("measurement_regions", out var measurementRegionsValue);
+                var measurementRegions = measurementRegionsValue as List<Rectangle>;
                 var precision = Convert.ToDouble(parameters.GetValueOrDefault("precision", 0.01));
                 
                 // 执行测量
-                result = await PerformMeasurementAsync(image, measurementType, targetObjects, measurementRegions, precision);
+                result = await PerformMeasurementAsync(image, measurementType ?? string.Empty, targetObjects, measurementRegions, precision);
                 result.ProcessingTime = DateTime.UtcNow - startTime;
                 
                 _logger.Debug($"测量完成: {measurementType}, 用时: {result.ProcessingTime.TotalMilliseconds:F1}ms");

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -204,11 +205,11 @@ public sealed class ConfigDrivenReportBridge
             string cssClass = step.Skipped ? "skipped" : (step.Passed ? "passed" : "failed");
             TimeSpan stepTime = step.EndTime - step.StartTime;
 
-            rowsHtml.AppendLine($"<tr><td>{step.StepId}</td><td>{step.StepName}</td>" +
+            rowsHtml.AppendLine($"<tr><td>{E(step.StepId)}</td><td>{E(step.StepName)}</td>" +
                 $"<td class='{cssClass}'>{resultText}</td>" +
-                $"<td>{step.MeasuredValue}</td><td>{step.ExpectedValue}</td>" +
+                $"<td>{E(step.MeasuredValue)}</td><td>{E(step.ExpectedValue)}</td>" +
                 $"<td>{stepTime.TotalSeconds:F2}s</td>" +
-                $"<td>{step.ErrorMessage}</td></tr>");
+                $"<td>{E(step.ErrorMessage)}</td></tr>");
         }
 
         string content = $@"
@@ -216,7 +217,7 @@ public sealed class ConfigDrivenReportBridge
 <html>
 <head>
     <meta charset='utf-8'>
-    <title>测试报告 - {report.ProjectName}</title>
+    <title>测试报告 - {E(report.ProjectName)}</title>
     <style>
         body {{ font-family: Arial, sans-serif; margin: 20px; }}
         .header {{ border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }}
@@ -234,8 +235,8 @@ public sealed class ConfigDrivenReportBridge
 <body>
     <div class='header'>
         <h1>自动化测试报告</h1>
-        <p>项目: {report.ProjectName} ({report.ProjectId})</p>
-        <p>DUT: {report.DutId}</p>
+        <p>项目: {E(report.ProjectName)} ({E(report.ProjectId)})</p>
+        <p>DUT: {E(report.DutId)}</p>
         <p>测试时间: {report.StartTime:yyyy-MM-dd HH:mm:ss} ~ {report.EndTime:yyyy-MM-dd HH:mm:ss}</p>
         <p>整体结果: <span class='{(report.Passed ? "overall-pass" : "overall-fail")}'>{(report.Passed ? "通过" : "失败")}</span></p>
     </div>
@@ -297,7 +298,7 @@ public sealed class ConfigDrivenReportBridge
             TimeSpan el = report.EndTime - report.StartTime;
             string css = report.Passed ? "passed" : "failed";
 
-            dutRowsHtml.AppendLine($"<tr><td>{report.DutId}</td><td>{report.ProjectName}</td>" +
+            dutRowsHtml.AppendLine($"<tr><td>{E(report.DutId)}</td><td>{E(report.ProjectName)}</td>" +
                 $"<td class='{css}'>{(report.Passed ? "通过" : "失败")}</td>" +
                 $"<td>{p}/{report.StepResults.Count}</td><td>{f}</td>" +
                 $"<td>{el.TotalSeconds:F2}s</td></tr>");
@@ -362,4 +363,6 @@ public sealed class ConfigDrivenReportBridge
             Version = "1.0"
         };
     }
+
+    private static string E(object? value) => WebUtility.HtmlEncode(value?.ToString() ?? string.Empty);
 }

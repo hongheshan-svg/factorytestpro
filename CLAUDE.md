@@ -47,9 +47,9 @@ UTF.Plugins.Example      → 示例插件（CMD 执行器）
 - `DUTConfiguration` — 产品信息、串口列表（COM3-COM16）、网络主机、MAC 范围
 - `TestProjectConfiguration.TestProject.Steps[]` — 测试步骤序列
 
-**测试步骤字段：** `Id, Name, Order, Type(serial/custom/instrument), Command, Expected, Timeout, Channel`
+**测试步骤字段：** `Id, Name, Order, Type(serial/custom/instrument), Command, Expected, Timeout, Channel, TargetDeviceId, RetryCount, StoreResultAs, ConditionExpression, ContinueOnFailure, Delay, Parameters.MockOutput`
 
-**结果验证前缀：** `contains:` / `equals:` / `regex:`
+**结果验证前缀：** `contains:` / `equals:` / `regex:` / `notcontains:`
 
 添加新测试步骤只需编辑配置，无需改动代码。
 
@@ -61,7 +61,7 @@ plugins/<pluginId>/<version>/plugin.manifest.json
                              <entryAssembly>.dll
 ```
 
-**Manifest 必填字段：** `pluginId, version, pluginApiVersion, entryAssembly, entryType, supportedStepTypes, supportedChannels, priority`
+**Manifest 必填字段：** `pluginId, version, pluginApiVersion, entryAssembly, entryType, supportedStepTypes, supportedChannels, priority, sha256`
 
 `priority` 数值越小优先级越高。插件在独立 `AssemblyLoadContext` 中加载，支持热卸载。
 
@@ -130,20 +130,33 @@ public class MainWindow : Window
 - **UTF.Core.DependencyInjection.ServiceCollectionExtensions.AddUtfCore()**
   - `ICache` (Singleton) - 内存缓存
   - `ILogger` (Singleton) - 日志服务
-  - `IResourcePool` (Singleton) - 资源池
-  - `ITestEngine` (Transient) - 测试引擎
-  - `ITestSessionManager` (Singleton) - 会话管理器
-  - `IDUTScheduler` (Singleton) - DUT 调度器
+  - `ConfigDrivenTestEngine` (Transient) - 配置驱动测试引擎（同时实现 `IStepExecutionService`）
+  - `IStepExecutionService` (Transient) - 步骤执行服务，桥接到 `ConfigDrivenTestEngine`
+  - `ConfigDrivenTestValidator` (Transient) - 配置驱动测试验证器
+  - `ConfigDrivenTestOrchestrator` (Singleton) - 会话编排器（持有共享会话状态）
+  - `IRetryPolicy` -> `ExponentialBackoffRetryPolicy` (Singleton)
+  - `IPluginContainer` -> `PluginContainer` (Singleton)
+  - `IEventBus` -> `EventBus` (Singleton)
+  - `ITestResultRepository` -> `FileTestResultRepository` (Singleton)
+  - `IConfigurationAuditLog` -> `FileAuditLog` (Singleton)
 
 - **UTF.UI.DependencyInjection.ServiceCollectionExtensions.AddUtfBusiness()**
-  - `DeviceManager` (Singleton)
-  - `TestOrchestrator` (Singleton)
+  - `IDeviceManager` -> `UTF.Business.DeviceManager` (Singleton)
 
 - **UTF.UI.DependencyInjection.ServiceCollectionExtensions.AddUtfUI()**
-  - `DUTMonitorManager` (Singleton)
+  - `IConfigurationAdapter` -> `ConfigurationAdapter` (Singleton)
+  - `StepExecutorPluginHost` (Singleton) - 插件宿主（按 `plugins/` 根目录扫描）
+  - `IPluginService` -> `PluginServiceAdapter` (Singleton)
   - `ConfigurationManager` (Singleton)
-  - `IPermissionManager` (Transient)
-
+  - `IConfigurationService` -> `ConfigurationManager` (Singleton)
+  - `DUTMonitorManager` (Singleton) - 同时实现 `IDUTMonitorService`
+  - `IDialogService` -> `DialogService` (Singleton)
+  - `IWindowFactory` -> `WindowFactory` (Singleton)
+  - `IPermissionManager` -> `PermissionManager` (Singleton)
+  - `ReportGenerator` (Singleton)
+  - `ConfigDrivenReportBridge` (Transient)
+  - `ITestConfigurationBuilder` -> `TestConfigurationBuilder` (Singleton)
+  - `MainWindowViewModel` / `ConfigurationCenterViewModel` / `QuickTestWizardViewModel` (Transient)
 
 ## 通信通道
 
