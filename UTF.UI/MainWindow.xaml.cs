@@ -102,6 +102,7 @@ public partial class MainWindow : Window
         RefreshLanguageBindings();
         _ = RefreshStepPreviewAsync();
         _ = LoadUiProfileAsync();
+        _ = _viewModel.RefreshConfigValidationAsync();
     }
 
     /// <summary>
@@ -279,6 +280,8 @@ public partial class MainWindow : Window
                 RefreshProductModelDisplay();
                 _viewModel.UpdateStatistics();
             });
+
+            await _viewModel.RefreshConfigValidationAsync();
         }
         catch (Exception ex)
         {
@@ -336,6 +339,7 @@ public partial class MainWindow : Window
             }
 
             await RefreshStepPreviewAsync();
+            await _viewModel.RefreshConfigValidationAsync();
 
             _logger?.Info("配置刷新完成");
         }

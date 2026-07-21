@@ -86,8 +86,12 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="步骤名称" Binding="{Binding StepName}" Width="140"/>
                             <DataGridTextColumn Header="描述" Binding="{Binding Description}" Width="160"/>
-                            <DataGridTextColumn Header="StepType" Binding="{Binding StepType}" Width="90"/>
-                            <DataGridTextColumn Header="Channel" Binding="{Binding Channel}" Width="90"/>
+                            <DataGridComboBoxColumn x:Name="StepTypeColumn" Header="StepType"
+                                                   SelectedItemBinding="{Binding StepType, UpdateSourceTrigger=PropertyChanged}"
+                                                   Width="100"/>
+                            <DataGridComboBoxColumn x:Name="ChannelColumn" Header="Channel"
+                                                   SelectedItemBinding="{Binding Channel, UpdateSourceTrigger=PropertyChanged}"
+                                                   Width="100"/>
                             <DataGridTextColumn Header="Command" Binding="{Binding Command}" Width="180"/>
                             <DataGridTextColumn Header="Expected" Binding="{Binding Expected}" Width="140"/>
                             <DataGridTextColumn Header="超时(秒)" Binding="{Binding TimeoutSeconds}" Width="80"/>

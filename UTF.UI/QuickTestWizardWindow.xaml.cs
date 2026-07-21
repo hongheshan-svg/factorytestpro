@@ -89,13 +89,31 @@ namespace UTF.UI
                 }
             }
 
+            // Safe fallbacks when no plugins are loaded so the wizard remains usable.
+            if (_viewModel.AvailableStepCategories.Count == 0)
+            {
+                foreach (var stepType in PluginCapabilityOptions.FallbackStepTypes)
+                {
+                    foreach (var channel in PluginCapabilityOptions.FallbackChannels)
+                    {
+                        _viewModel.AvailableStepCategories.Add(new WizardStepCategory
+                        {
+                            Label = $"🔧 内置 · {stepType}/{channel}",
+                            StepType = stepType,
+                            Channel = channel,
+                            CommandHint = $"使用内置回退类型 {stepType}/{channel}。安装插件后可获得更多能力。",
+                            PluginId = "builtin.fallback",
+                            PluginName = "内置回退"
+                        });
+                    }
+                }
+
+                _viewModel.StepCommandHint = "💡 未发现可用插件能力，已提供内置回退类型。安装插件可扩展更多能力。";
+            }
+
             if (_viewModel.AvailableStepCategories.Count > 0)
             {
                 _viewModel.SelectedStepCategory = _viewModel.AvailableStepCategories[0];
-            }
-            else
-            {
-                _viewModel.StepCommandHint = "💡 未发现可用插件能力。请先安装并加载步骤执行插件。";
             }
         }
 

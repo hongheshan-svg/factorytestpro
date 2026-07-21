@@ -17,6 +17,7 @@
         <converters:LogLevelToColorConverter x:Key="LogLevelToColorConverter"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVisConverter"/>
         
         <!-- 测试结果样式 -->
         <Style x:Key="PassResultStyle" TargetType="TextBlock">
@@ -61,6 +62,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="60"/>
             <RowDefinition Height="60"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="30"/>
         </Grid.RowDefinitions>
@@ -140,7 +142,7 @@
             <StackPanel Orientation="Horizontal" Margin="16,0" VerticalAlignment="Center">
                 <Button Name="StartTestBtn" Content="{Binding StartTestButtonText}" Padding="18,9" FontSize="13" FontWeight="SemiBold"
                         Background="{StaticResource SuccessBrush}" Command="{Binding StartTestCommand}"
-                        IsEnabled="{Binding CanStartTest}"/>
+                        IsEnabled="{Binding IsStartTestEnabled}"/>
                 <Button Name="StopTestBtn" Content="⏹  停止测试" Padding="18,9" FontSize="13" FontWeight="SemiBold"
                         Background="{StaticResource WarnBrush}" Margin="8,0,0,0" Command="{Binding StopTestCommand}"
                         IsEnabled="{Binding CanStopTest}"/>
@@ -183,9 +185,28 @@
                 </Border>
             </StackPanel>
         </Border>
+
+        <!-- 配置校验横幅：有错误时显示，非模态，不阻断其它操作 -->
+        <Border Grid.Row="3" Padding="14,8" BorderThickness="0,0,0,1" BorderBrush="#E0A800"
+                Background="#FFF3CD"
+                Visibility="{Binding HasConfigErrors, Converter={StaticResource BoolToVisConverter}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="⚠" FontSize="16" VerticalAlignment="Center" Margin="0,0,10,0" Foreground="#856404"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="配置校验未通过 — 启动测试已禁用，请在配置中心修复后重试。"
+                               FontWeight="SemiBold" FontSize="12" Foreground="#856404"/>
+                    <TextBlock Text="{Binding ConfigValidationSummary}" FontSize="11" Foreground="#6D5200"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
         
         <!-- 主界面内容 - 简化版 -->
-        <Grid Grid.Row="3" Margin="10">
+        <Grid Grid.Row="4" Margin="10">
             
             <!-- DUT列表监控区域 -->
             <Border Background="White" CornerRadius="8" Margin="5">
@@ -322,7 +343,7 @@
         </Grid>
         
         <!-- 状态栏 -->
-        <Border Grid.Row="4" Background="#0D47A1">
+        <Border Grid.Row="5" Background="#0D47A1">
             <Grid Margin="5,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>

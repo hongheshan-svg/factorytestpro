@@ -37,6 +37,10 @@ public partial class ConfigurationCenterViewModel : ObservableObject
         _pluginCapabilities = pluginCapabilities;
         _config = new UnifiedConfiguration();
         EnsureNestedObjects(_config);
+
+        // Seed fallbacks so Type/Channel bindings have items before async plugin load.
+        ReplaceOptions(AvailableStepTypes, PluginCapabilityOptions.FallbackStepTypes);
+        ReplaceOptions(AvailableChannels, PluginCapabilityOptions.FallbackChannels);
     }
 
     /// <summary>当前编辑中的统一配置对象。两端绑定字段直接写入其嵌套节点。</summary>
@@ -44,6 +48,12 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     private UnifiedConfiguration _config;
 
     // ────────────────── 可选值集合（供 ComboBox/ListBox 绑定） ──────────────────
+
+    /// <summary>步骤类型（插件 SupportedStepTypes 并集，无插件时回退）。</summary>
+    public ObservableCollection<string> AvailableStepTypes { get; } = new();
+
+    /// <summary>通道（插件 SupportedChannels 并集，无插件时回退）。</summary>
+    public ObservableCollection<string> AvailableChannels { get; } = new();
 
     /// <summary>日志级别可选值。</summary>
     public ObservableCollection<string> LogLevelOptions { get; } = new() { "Debug", "Info", "Warning", "Error" };
@@ -271,10 +281,51 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     /// </summary>
     public async Task LoadConfigAsync()
     {
+        await RefreshPluginOptionsAsync().ConfigureAwait(true);
         var loaded = await _configManager.GetUnifiedConfigurationAsync();
         EnsureNestedObjects(loaded);
         Config = loaded;
         SyncFromConfig();
+    }
+
+    /// <summary>
+    /// Refresh Type/Channel dropdowns from <see cref="IPluginCapabilityService"/>,
+    /// falling back to <see cref="PluginCapabilityOptions"/> defaults when empty.
+    /// </summary>
+    public Task RefreshPluginOptionsAsync()
+    {
+        try
+        {
+            if (_pluginCapabilities is not null)
+            {
+                var types = _pluginCapabilities.GetAllStepTypes();
+                var channels = _pluginCapabilities.GetAllChannels();
+                ReplaceOptions(
+                    AvailableStepTypes,
+                    types.Count > 0 ? types : PluginCapabilityOptions.FallbackStepTypes);
+                ReplaceOptions(
+                    AvailableChannels,
+                    channels.Count > 0 ? channels : PluginCapabilityOptions.FallbackChannels);
+                return Task.CompletedTask;
+            }
+        }
+        catch
+        {
+            // Keep fallbacks so the editor remains usable.
+        }
+
+        ReplaceOptions(AvailableStepTypes, PluginCapabilityOptions.FallbackStepTypes);
+        ReplaceOptions(AvailableChannels, PluginCapabilityOptions.FallbackChannels);
+        return Task.CompletedTask;
+    }
+
+    private static void ReplaceOptions(ObservableCollection<string> target, IEnumerable<string> source)
+    {
+        target.Clear();
+        foreach (var item in source)
+        {
+            target.Add(item);
+        }
     }
 
     /// <summary>将 <see cref="Config"/> 中的列表/枚举字段同步到各可观察集合与选中值。</summary>

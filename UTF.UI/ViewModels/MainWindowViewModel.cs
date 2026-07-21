@@ -147,6 +147,27 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private string _startTestButtonText = "▶ 开始测试";
 
+    // ────────────────── Config validation banner ──────────────────
+
+    /// <summary>
+    /// 当前配置是否存在校验错误。为 true 时主窗口显示顶部校验横幅，并禁用“开始测试”。
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsStartTestEnabled))]
+    [NotifyCanExecuteChangedFor(nameof(StartTestCommand))]
+    private bool _hasConfigErrors;
+
+    /// <summary>
+    /// 配置校验摘要（错误数 + 前若干条错误文本），供横幅展示。
+    /// </summary>
+    [ObservableProperty]
+    private string _configValidationSummary = string.Empty;
+
+    /// <summary>
+    /// “开始测试”按钮是否可点：具备权限且当前配置通过校验。
+    /// </summary>
+    public bool IsStartTestEnabled => CanStartTest && !HasConfigErrors;
+
     // ────────────────── Permission-gating flags ──────────────────
     // 这些标志由 RefreshPermissions() 基于 IPermissionManager.HasPermission 计算，
     // 供 XAML 中 IsEnabled="{Binding CanXxx}" 绑定使用，取代 MainWindow.ApplyPermissions
@@ -154,6 +175,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     /// <summary>当前用户是否有启动测试权限。</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsStartTestEnabled))]
     [NotifyCanExecuteChangedFor(nameof(StartTestCommand))]
     private bool _canStartTest;
 
@@ -455,12 +477,25 @@ public partial class MainWindowViewModel : ObservableObject
 
     // ────────────────── Commands ──────────────────
 
+    /// <summary>
+    /// “开始测试”可执行条件：有权限且配置无错误。
+    /// </summary>
+    private bool CanExecuteStartTest() => CanStartTest && !HasConfigErrors;
+
     /// <summary>启动测试。</summary>
-    [RelayCommand(CanExecute = nameof(CanStartTest))]
+    [RelayCommand(CanExecute = nameof(CanExecuteStartTest))]
     private async Task StartTestAsync()
     {
         if (IsTestRunning)
         {
+            return;
+        }
+
+        if (HasConfigErrors)
+        {
+            _dialogService.ShowWarning(
+                "当前配置校验未通过，请先修复配置错误后再启动测试。\n" + ConfigValidationSummary,
+                "配置无效");
             return;
         }
 
@@ -548,6 +583,7 @@ public partial class MainWindowViewModel : ObservableObject
             StatusTextFooter = "配置已刷新，系统已就绪";
 
             await RefreshConfigurationAfterImportAsync();
+            await RefreshConfigValidationAsync();
             _dialogService.ShowInformation("配置导入成功！");
         }
         catch (Exception ex)
@@ -838,6 +874,47 @@ public partial class MainWindowViewModel : ObservableObject
     {
         // 桥接到代码后置：DataGrid 重绑、产品型号刷新等需要 UI 资源的操作仍保留在 code-behind。
         ConfigurationRefreshRequested?.Invoke(this, e);
+        // Fire-and-forget validation refresh after auxiliary windows apply config.
+        _ = RefreshConfigValidationAsync();
+    }
+
+    /// <summary>
+    /// 对当前统一配置运行 <see cref="IConfigurationAdapter.ValidateConfigurationWithErrors"/>，
+    /// 更新 <see cref="HasConfigErrors"/> / <see cref="ConfigValidationSummary"/>。
+    /// 在主窗口加载、配置导入/应用后调用。
+    /// </summary>
+    public async Task RefreshConfigValidationAsync()
+    {
+        try
+        {
+            var config = await _configManager.GetUnifiedConfigurationAsync().ConfigureAwait(true);
+            var errors = _configAdapter.ValidateConfigurationWithErrors(config) ?? new List<string>();
+            ApplyConfigValidation(errors);
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error("配置校验横幅刷新失败", ex);
+            HasConfigErrors = true;
+            ConfigValidationSummary = $"配置校验异常: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// 使用已收集的错误列表更新横幅状态（便于单元测试同步调用）。
+    /// </summary>
+    public void ApplyConfigValidation(IReadOnlyList<string>? errors)
+    {
+        if (errors is null || errors.Count == 0)
+        {
+            HasConfigErrors = false;
+            ConfigValidationSummary = string.Empty;
+            return;
+        }
+
+        HasConfigErrors = true;
+        var preview = string.Join("；", errors.Take(3));
+        var more = errors.Count > 3 ? $"（另有 {errors.Count - 3} 项）" : string.Empty;
+        ConfigValidationSummary = $"配置存在 {errors.Count} 个问题：{preview}{more}";
     }
 
     /// <summary>

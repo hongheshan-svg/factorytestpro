@@ -469,22 +469,16 @@
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="类型:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
                                 <ComboBox Grid.Row="1" Grid.Column="1" x:Name="DetailTypeCombo" Margin="0,8,10,8" IsEditable="True"
+                                          ItemsSource="{Binding AvailableStepTypes}"
                                           Text="{Binding SelectedStep.Type, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           LostFocus="DetailTypeOrChannel_LostFocus"
-                                          SelectionChanged="DetailTypeOrChannel_SelectionChanged">
-                                    <ComboBoxItem Content="serial"/>
-                                    <ComboBoxItem Content="custom"/>
-                                    <ComboBoxItem Content="instrument"/>
-                                </ComboBox>
+                                          SelectionChanged="DetailTypeOrChannel_SelectionChanged"/>
                                 <TextBlock Grid.Row="1" Grid.Column="2" Text="通道:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
                                 <ComboBox Grid.Row="1" Grid.Column="3" x:Name="DetailChannelCombo" Margin="0,8,0,8" IsEditable="True"
+                                          ItemsSource="{Binding AvailableChannels}"
                                           Text="{Binding SelectedStep.Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           LostFocus="DetailTypeOrChannel_LostFocus"
-                                          SelectionChanged="DetailTypeOrChannel_SelectionChanged">
-                                    <ComboBoxItem Content="Serial"/>
-                                    <ComboBoxItem Content="Cmd"/>
-                                    <ComboBoxItem Content="Telnet"/>
-                                </ComboBox>
+                                          SelectionChanged="DetailTypeOrChannel_SelectionChanged"/>
 
                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="目标:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
                                 <ComboBox Grid.Row="2" Grid.Column="1" x:Name="DetailTargetCombo" Margin="0,8,10,8"

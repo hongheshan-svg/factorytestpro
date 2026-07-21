@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using Microsoft.Win32;
 using System.IO;
 using System.Text.Json;
+using UTF.Core;
 using UTF.UI.Models;
 using UTF.UI.Services;
 
@@ -17,14 +18,41 @@ namespace UTF.UI
         public ObservableCollection<TestPlanStep> TestSteps { get; set; }
         private string _currentFilePath = "";
         private readonly ConfigurationManager? _configManager;
+        private readonly IPluginService? _pluginService;
 
-        public TestPlanEditorWindow(ConfigurationManager configManager)
+        public TestPlanEditorWindow(ConfigurationManager configManager, IPluginService? pluginService = null)
         {
             _configManager = configManager;
+            _pluginService = pluginService;
             InitializeComponent();
             TestSteps = new ObservableCollection<TestPlanStep>();
             TestStepsDataGrid.ItemsSource = TestSteps;
             UpdateStepCount();
+            Loaded += OnWindowLoaded;
+        }
+
+        private async void OnWindowLoaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_pluginService is not null && _pluginService.LoadedPlugins.Count == 0)
+                {
+                    await _pluginService.InitializeAsync();
+                }
+
+                var plugins = _pluginService?.LoadedPlugins;
+                var stepTypes = PluginCapabilityOptions.MergeStepTypes(plugins);
+                var channels = PluginCapabilityOptions.MergeChannels(plugins);
+                StepTypeColumn.ItemsSource = stepTypes;
+                ChannelColumn.ItemsSource = channels;
+            }
+            catch (Exception ex)
+            {
+                // Keep editor usable with fallbacks if plugin init fails.
+                StepTypeColumn.ItemsSource = PluginCapabilityOptions.FallbackStepTypes;
+                ChannelColumn.ItemsSource = PluginCapabilityOptions.FallbackChannels;
+                StatusText.Text = $"插件能力加载失败，已使用回退类型: {ex.Message}";
+            }
         }
 
         private void UpdateStepCount()
