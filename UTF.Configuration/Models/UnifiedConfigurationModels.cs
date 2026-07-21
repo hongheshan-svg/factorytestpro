@@ -13,6 +13,46 @@ public class UnifiedConfiguration
     public SystemSettings SystemSettings { get; set; } = new();
     public DUTConfiguration DUTConfiguration { get; set; } = new();
     public TestProjectConfiguration? TestProjectConfiguration { get; set; }
+
+    /// <summary>
+    /// Optional UI shell profile. When null/missing, defaults to full engineer chrome
+    /// (backward compatible with existing configs).
+    /// </summary>
+    public UiProfile? UiProfile { get; set; }
+}
+
+/// <summary>
+/// UI generalization profile — controls operator-simplified chrome and terminology.
+/// Does not switch multi-workbench layouts (see P5); only profile flags + menu chrome.
+/// </summary>
+public class UiProfile
+{
+    /// <summary>
+    /// Workbench mode name: MultiDutBoard | SingleStation | InstrumentBench | ScanToTest.
+    /// Displayed in the status bar; layout switching is owned by P5.
+    /// </summary>
+    public string Mode { get; set; } = "MultiDutBoard";
+
+    /// <summary>When false, step-result dynamic columns may be suppressed on the DUT grid.</summary>
+    public bool ShowStepColumns { get; set; } = true;
+
+    /// <summary>When false, advanced engineering menus are hidden (config/plugin/plan editors).</summary>
+    public bool ShowAdvancedMenus { get; set; } = true;
+
+    /// <summary>When false, configuration editing entry points are hidden/disabled.</summary>
+    public bool AllowConfigEdit { get; set; } = true;
+
+    /// <summary>Primary toolbar action ids (hint for future mode layouts).</summary>
+    public List<string> PrimaryActions { get; set; } = new() { "StartAll", "StopAll", "Reset" };
+
+    /// <summary>Unit terminology shown in status/labels (e.g. DUT, Station, Unit).</summary>
+    public string UnitLabel { get; set; } = "DUT";
+
+    /// <summary>Optional terminology overrides (key → display string). Reserved for future use.</summary>
+    public Dictionary<string, string>? Terminology { get; set; }
+
+    /// <summary>Full engineer UI defaults used when config omits <see cref="UiProfile"/>.</summary>
+    public static UiProfile CreateDefault() => new();
 }
 
 public class ConfigurationInfo

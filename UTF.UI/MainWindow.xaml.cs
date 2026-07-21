@@ -101,6 +101,28 @@ public partial class MainWindow : Window
     {
         RefreshLanguageBindings();
         _ = RefreshStepPreviewAsync();
+        _ = LoadUiProfileAsync();
+    }
+
+    /// <summary>
+    /// Load UiProfile from unified config and apply operator/engineer shell chrome.
+    /// </summary>
+    private async System.Threading.Tasks.Task LoadUiProfileAsync()
+    {
+        try
+        {
+            await _viewModel.LoadUiProfileFromConfigAsync();
+            // Re-attach grid so ShowStepColumns takes effect on dynamic columns.
+            if (MainDUTListDataGrid != null)
+            {
+                _dutMonitorManager.ShowStepColumns = _viewModel.ShowStepColumns;
+                _dutMonitorManager.AttachToDataGrid(MainDUTListDataGrid);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error("加载 UiProfile 失败", ex);
+        }
     }
 
     private void InitializeUI()
@@ -299,12 +321,19 @@ public partial class MainWindow : Window
         {
             _logger?.Info("配置已更改，刷新界面...");
 
+            await _viewModel.LoadUiProfileFromConfigAsync();
             await _dutMonitorManager.InitializeAsync();
 
             // P1-9: these already marshal to the UI thread internally - call directly instead of
             // round-tripping through a ThreadPool task + Dispatcher.Invoke.
             RefreshProductModelDisplay();
             _viewModel.UpdateStatistics();
+
+            if (MainDUTListDataGrid != null)
+            {
+                _dutMonitorManager.ShowStepColumns = _viewModel.ShowStepColumns;
+                _dutMonitorManager.AttachToDataGrid(MainDUTListDataGrid);
+            }
 
             await RefreshStepPreviewAsync();
 

@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using UTF.Configuration.Models;
 using UTF.Core;
 using UTF.Core.Caching;
 using UTF.Logging;
@@ -102,6 +103,136 @@ public sealed class MainWindowViewModelTests : IDisposable
         Assert.False(_viewModel.CanImportConfig);
         Assert.False(_viewModel.CanExportReport);
         Assert.False(_viewModel.CanClearLogs);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyUiProfile_Null_UsesFullEngineerDefaults()
+    {
+        _permissionManager.HasPermission(Permission.SystemConfig).Returns(true);
+        _permissionManager.CurrentUser.Returns(new UserInfo
+        {
+            Username = "admin",
+            DisplayName = "Admin",
+            Role = UserRole.Admin
+        });
+
+        _viewModel.ApplyUiProfile(null);
+
+        Assert.True(_viewModel.ShowEngineeringMenus);
+        Assert.False(_viewModel.ShowOperatorChrome);
+        Assert.Equal("MultiDutBoard", _viewModel.UiModeDisplayName);
+        Assert.Equal("DUT", _viewModel.UnitLabel);
+        Assert.True(_viewModel.ShowStepColumns);
+        Assert.True(_viewModel.CanConfigureSystem);
+        Assert.True(_viewModel.CanImportConfig);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyUiProfile_AllowConfigEditFalse_HidesEngineeringMenus()
+    {
+        _permissionManager.HasPermission(Permission.SystemConfig).Returns(true);
+        _permissionManager.CurrentUser.Returns(new UserInfo
+        {
+            Username = "eng",
+            Role = UserRole.Engineer
+        });
+
+        _viewModel.ApplyUiProfile(new UiProfile
+        {
+            Mode = "SingleStation",
+            AllowConfigEdit = false,
+            ShowAdvancedMenus = true
+        });
+
+        Assert.False(_viewModel.ShowEngineeringMenus);
+        Assert.True(_viewModel.ShowOperatorChrome);
+        Assert.False(_viewModel.CanConfigureSystem);
+        Assert.False(_viewModel.CanImportConfig);
+        Assert.False(_viewModel.CanManageTestPlans);
+        Assert.Equal("SingleStation", _viewModel.UiModeDisplayName);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyUiProfile_OperatorRole_ForcesSimplifiedChromeEvenWhenProfileAllowsEdit()
+    {
+        // Security > profile: Operator must not see engineering menus even with full profile.
+        _permissionManager.HasPermission(Permission.SystemConfig).Returns(true);
+        _permissionManager.HasPermission(Permission.TestPlanManagement).Returns(true);
+        _permissionManager.CurrentUser.Returns(new UserInfo
+        {
+            Username = "op1",
+            DisplayName = "Operator",
+            Role = UserRole.Operator
+        });
+
+        _viewModel.ApplyUiProfile(new UiProfile
+        {
+            Mode = "MultiDutBoard",
+            AllowConfigEdit = true,
+            ShowAdvancedMenus = true
+        });
+
+        Assert.False(_viewModel.ShowEngineeringMenus);
+        Assert.True(_viewModel.ShowOperatorChrome);
+        Assert.False(_viewModel.CanConfigureSystem);
+        Assert.False(_viewModel.CanImportConfig);
+        Assert.False(_viewModel.CanManageTestPlans);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyUiProfile_ObserverRole_ForcesSimplifiedChrome()
+    {
+        _permissionManager.HasPermission(Permission.SystemConfig).Returns(true);
+        _permissionManager.CurrentUser.Returns(new UserInfo
+        {
+            Username = "obs",
+            Role = UserRole.Observer
+        });
+
+        _viewModel.ApplyUiProfile(UiProfile.CreateDefault());
+
+        Assert.False(_viewModel.ShowEngineeringMenus);
+        Assert.True(_viewModel.ShowOperatorChrome);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyUiProfile_UnitLabel_UpdatesTerminologyLabels()
+    {
+        _viewModel.ApplyUiProfile(new UiProfile
+        {
+            UnitLabel = "Station",
+            Mode = "SingleStation",
+            ShowStepColumns = false
+        });
+
+        Assert.Equal("Station", _viewModel.UnitLabel);
+        Assert.Equal("📊 Station统计:", _viewModel.UnitStatsLabel);
+        Assert.Equal("🎛️ Station监控台", _viewModel.MonitorTitleText);
+        Assert.False(_viewModel.ShowStepColumns);
+        Assert.False(_dutMonitorManager.ShowStepColumns);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyUiProfile_LacksSystemConfig_HidesEngineeringMenus()
+    {
+        _permissionManager.HasPermission(Permission.SystemConfig).Returns(false);
+        _permissionManager.CurrentUser.Returns(new UserInfo
+        {
+            Username = "tech",
+            Role = UserRole.Technician
+        });
+
+        _viewModel.ApplyUiProfile(UiProfile.CreateDefault());
+
+        Assert.False(_viewModel.ShowEngineeringMenus);
+        Assert.True(_viewModel.ShowOperatorChrome);
+        Assert.False(_viewModel.CanConfigureSystem);
     }
 
     [Fact]

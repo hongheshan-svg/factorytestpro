@@ -71,6 +71,12 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
     }
 
     /// <summary>
+    /// When false, dynamic per-step result columns are not generated (UiProfile.ShowStepColumns).
+    /// Default true preserves existing engineer grid behavior.
+    /// </summary>
+    public bool ShowStepColumns { get; set; } = true;
+
+    /// <summary>
     /// 将 DUT 监控列表绑定到指定 <see cref="DataGrid"/>，并刷新动态列。
     /// </summary>
     public void AttachToDataGrid(DataGrid dataGrid)
@@ -646,6 +652,11 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
             _dataGrid.Columns.Remove(column);
         }
         _dynamicColumns.Clear();
+
+        if (!ShowStepColumns)
+        {
+            return Task.CompletedTask;
+        }
 
         var steps = DUTItems.FirstOrDefault()?.TestSteps ?? new ObservableCollection<DUTTestStep>();
         var insertionIndex = Math.Max(0, _dataGrid.Columns.Count - 1);

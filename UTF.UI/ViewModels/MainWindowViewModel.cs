@@ -9,6 +9,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
+using UTF.Configuration.Models;
 using UTF.Core;
 using UTF.Core.Caching;
 using UTF.Reporting;
@@ -35,6 +36,9 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly IServiceProvider _serviceProvider;
     private readonly UTF.Logging.ILogger _logger;
     private readonly IConfigurationAdapter _configAdapter;
+
+    /// <summary>Active UI profile (defaults to full engineer chrome when config omits it).</summary>
+    private UiProfile _uiProfile = UiProfile.CreateDefault();
 
     public MainWindowViewModel(
         DUTMonitorManager dutMonitorManager,
@@ -63,6 +67,7 @@ public partial class MainWindowViewModel : ObservableObject
         _dutMonitorManager.AllTestsCompleted += OnAllTestsCompleted;
 
         // 权限门控：初始计算各 Can* 标志，并订阅权限变更事件以保持同步。
+        ApplyUiProfile(null);
         RefreshPermissions();
         _permissionManager.PermissionChanged += OnPermissionChanged;
 
@@ -207,8 +212,87 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(OpenUserManagerCommand))]
     private bool _canManageUsers;
 
+    // ────────────────── UiProfile / shell chrome ──────────────────
+
     /// <summary>
-    /// 基于 <see cref="IPermissionManager"/> 重新计算所有 Can* 标志。
+    /// Engineering menus (config center, plugin manager, test plan editor, import config).
+    /// Bound to menu Visibility; false = operator-simplified shell.
+    /// </summary>
+    [ObservableProperty]
+    private bool _showEngineeringMenus = true;
+
+    /// <summary>
+    /// Operator-oriented chrome (status badge, simplified emphasis). True when engineering menus are hidden.
+    /// </summary>
+    [ObservableProperty]
+    private bool _showOperatorChrome;
+
+    /// <summary>UiProfile.Mode text for the status bar (e.g. MultiDutBoard).</summary>
+    [ObservableProperty]
+    private string _uiModeDisplayName = "MultiDutBoard";
+
+    /// <summary>Unit terminology from UiProfile (default DUT).</summary>
+    [ObservableProperty]
+    private string _unitLabel = "DUT";
+
+    /// <summary>Status-bar stats header, e.g. "📊 DUT统计:".</summary>
+    [ObservableProperty]
+    private string _unitStatsLabel = "📊 DUT统计:";
+
+    /// <summary>Monitor panel title, e.g. "🎛️ DUT监控台".</summary>
+    [ObservableProperty]
+    private string _monitorTitleText = "🎛️ DUT监控台";
+
+    /// <summary>Whether dynamic step columns should be shown (UiProfile.ShowStepColumns).</summary>
+    [ObservableProperty]
+    private bool _showStepColumns = true;
+
+    /// <summary>
+    /// Snapshot of the active profile (for diagnostics / tests). Never null after construction.
+    /// </summary>
+    public UiProfile ActiveUiProfile => _uiProfile;
+
+    /// <summary>
+    /// Apply a <see cref="UiProfile"/> (null → full engineer defaults) and refresh chrome flags.
+    /// Safe to call from unit tests without loading config.
+    /// </summary>
+    public void ApplyUiProfile(UiProfile? profile)
+    {
+        _uiProfile = profile ?? UiProfile.CreateDefault();
+
+        UnitLabel = string.IsNullOrWhiteSpace(_uiProfile.UnitLabel) ? "DUT" : _uiProfile.UnitLabel.Trim();
+        UnitStatsLabel = $"📊 {UnitLabel}统计:";
+        MonitorTitleText = $"🎛️ {UnitLabel}监控台";
+        UiModeDisplayName = string.IsNullOrWhiteSpace(_uiProfile.Mode) ? "MultiDutBoard" : _uiProfile.Mode.Trim();
+        ShowStepColumns = _uiProfile.ShowStepColumns;
+
+        // Keep grid column generation in sync when a DataGrid is attached.
+        _dutMonitorManager.ShowStepColumns = ShowStepColumns;
+
+        RefreshPermissions();
+    }
+
+    /// <summary>
+    /// Load <see cref="UiProfile"/> from the unified configuration (missing → engineer defaults).
+    /// Called on MainWindow load and after configuration refresh.
+    /// </summary>
+    public async Task LoadUiProfileFromConfigAsync()
+    {
+        try
+        {
+            var config = await _configManager.GetUnifiedConfigurationAsync().ConfigureAwait(true);
+            ApplyUiProfile(config.UiProfile);
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error("加载 UiProfile 失败，使用默认工程师界面", ex);
+            ApplyUiProfile(null);
+        }
+    }
+
+    /// <summary>
+    /// 基于 <see cref="IPermissionManager"/> 重新计算所有 Can* 标志，
+    /// 再按 UiProfile + 角色收紧工程菜单（安全优先于配置）。
     /// 在构造函数、权限变更事件、登录/登出后调用，由 XAML 绑定消费。
     /// </summary>
     public void RefreshPermissions()
@@ -216,7 +300,9 @@ public partial class MainWindowViewModel : ObservableObject
         CanStartTest = _permissionManager.HasPermission(Permission.TestStart);
         CanStopTest = _permissionManager.HasPermission(Permission.TestStop);
         CanImportConfig = _permissionManager.HasPermission(Permission.SystemConfig);
-        CanExportReport = _permissionManager.HasPermission(Permission.DataExport);
+        CanExportReport = _permissionManager.HasPermission(Permission.DataExport)
+            || _permissionManager.HasPermission(Permission.DataView)
+            || _permissionManager.HasPermission(Permission.ReportGeneration);
         CanClearLogs = _permissionManager.HasPermission(Permission.LogClear);
         CanRetestDut = _permissionManager.HasPermission(Permission.TestStart);
         CanConfigureSystem = _permissionManager.HasPermission(Permission.SystemConfig);
@@ -225,6 +311,39 @@ public partial class MainWindowViewModel : ObservableObject
         CanEditTestPlan = _permissionManager.HasPermission(Permission.TestPlanEdit);
         CanManageDevices = _permissionManager.HasPermission(Permission.DeviceManagement);
         CanManageUsers = _permissionManager.HasPermission(Permission.UserManagement);
+
+        ApplyUiChromeConstraints();
+    }
+
+    /// <summary>
+    /// Compute <see cref="ShowEngineeringMenus"/> / <see cref="ShowOperatorChrome"/> and clamp
+    /// config-edit Can* flags. Operator/Observer always get simplified chrome (security &gt; profile).
+    /// </summary>
+    private void ApplyUiChromeConstraints()
+    {
+        var profile = _uiProfile ?? UiProfile.CreateDefault();
+        var role = _permissionManager.CurrentUser?.Role;
+        var isRestrictedRole = role is UserRole.Operator or UserRole.Observer;
+
+        // Profile wants full chrome only when both edit + advanced menus are enabled.
+        var profileAllowsEngineering = profile.AllowConfigEdit && profile.ShowAdvancedMenus;
+        var hasSystemConfig = _permissionManager.HasPermission(Permission.SystemConfig);
+
+        // Hide engineering shell when: profile denies edit, no SystemConfig, or restricted role.
+        ShowEngineeringMenus = profileAllowsEngineering && hasSystemConfig && !isRestrictedRole;
+        ShowOperatorChrome = !ShowEngineeringMenus;
+
+        if (!ShowEngineeringMenus)
+        {
+            // Config / plan / plugin entry points — force off for simplified shell.
+            CanImportConfig = false;
+            CanConfigureSystem = false;
+            CanManageTestPlans = false;
+            CanCreateTestPlan = false;
+            CanEditTestPlan = false;
+            // User management stays available only when the user has UserManagement permission
+            // (already set above). Restricted operator roles typically lack it.
+        }
     }
 
     private void OnPermissionChanged(object? sender, PermissionChangedEventArgs e)
@@ -734,6 +853,7 @@ public partial class MainWindowViewModel : ObservableObject
             _logger?.Info("开始刷新配置...");
 
             await _configManager.RefreshConfiguration();
+            await LoadUiProfileFromConfigAsync();
             await _dutMonitorManager.InitializeAsync();
 
             if (!IsTestRunning)

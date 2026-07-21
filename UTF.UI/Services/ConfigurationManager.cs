@@ -61,6 +61,7 @@ public class ConfigurationManager : IConfigurationService, IDisposable
             "UnifiedConfiguration" => unified,
             "SystemSettings" => unified.SystemSettings,
             "ConfigurationInfo" => unified.ConfigurationInfo,
+            "UiProfile" => unified.UiProfile ?? UiProfile.CreateDefault(),
             _ => null
         };
         return value as T;

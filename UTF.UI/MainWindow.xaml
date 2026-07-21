@@ -16,6 +16,7 @@
         <local:DutCountToColorConverter x:Key="DutCountToColorConverter"/>
         <converters:LogLevelToColorConverter x:Key="LogLevelToColorConverter"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         
         <!-- 测试结果样式 -->
         <Style x:Key="PassResultStyle" TargetType="TextBlock">
@@ -64,34 +65,41 @@
             <RowDefinition Height="30"/>
         </Grid.RowDefinitions>
         
-        <!-- 菜单栏 -->
+        <!-- 菜单栏 — engineering items Visibility bound to ShowEngineeringMenus (UiProfile + role) -->
         <Menu Grid.Row="0" Background="White" BorderBrush="#FFE0E0E0" BorderThickness="0,0,0,1">
             <MenuItem Header="文件(_F)">
                 <MenuItem x:Name="ImportConfigFileMenuItem" Header="导入配置(_I)" Command="{Binding ImportConfigCommand}"
-                          IsEnabled="{Binding CanImportConfig}"/>
-                <Separator/>
+                          IsEnabled="{Binding CanImportConfig}"
+                          Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <Separator Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 <MenuItem Header="退出(_X)" Command="{Binding ExitAppCommand}"/>
             </MenuItem>
-            <MenuItem x:Name="ConfigurationMenuItem" Header="配置(_C)" IsEnabled="{Binding CanConfigureSystem}">
+            <MenuItem x:Name="ConfigurationMenuItem" Header="配置(_C)"
+                      IsEnabled="{Binding CanConfigureSystem}"
+                      Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <MenuItem x:Name="ConfigCenterMenuItem" Header="配置管理中心(_M)" Command="{Binding OpenConfigurationCenterCommand}"/>
                 <Separator/>
                 <MenuItem x:Name="ImportConfigMenuItem" Header="导入配置(_I)" Command="{Binding ImportConfigCommand}"/>
             </MenuItem>
             <MenuItem Header="工具(_T)">
                 <MenuItem x:Name="QuickCreateMenuItem" Header="🚀 快速创建测试(_Q)" Command="{Binding OpenQuickTestWizardCommand}" FontWeight="SemiBold"
-                          IsEnabled="{Binding CanManageTestPlans}"/>
-                <Separator/>
+                          IsEnabled="{Binding CanManageTestPlans}"
+                          Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <Separator Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 <MenuItem x:Name="PluginManagerMenuItem" Header="插件管理(_P)" Command="{Binding OpenPluginManagerCommand}"
-                          IsEnabled="{Binding CanConfigureSystem}"/>
+                          IsEnabled="{Binding CanConfigureSystem}"
+                          Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 <MenuItem x:Name="DeviceManagerMenuItem" Header="设备管理(_D)" Command="{Binding OpenDeviceManagerCommand}"
                           IsEnabled="{Binding CanManageDevices}"/>
                 <MenuItem x:Name="UserManagerMenuItem" Header="用户管理(_U)" Command="{Binding OpenUserManagerCommand}"
                           IsEnabled="{Binding CanManageUsers}"/>
-                <Separator/>
+                <Separator Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 <MenuItem x:Name="TestPlanEditorMenuItem" Header="测试计划编辑器(_E)" Command="{Binding OpenTestPlanEditorCommand}"
-                          IsEnabled="{Binding CanManageTestPlans}"/>
+                          IsEnabled="{Binding CanManageTestPlans}"
+                          Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 <MenuItem x:Name="ToolsConfigCenterMenuItem" Header="配置管理中心(_C)" Command="{Binding OpenConfigurationCenterCommand}"
-                          IsEnabled="{Binding CanConfigureSystem}"/>
+                          IsEnabled="{Binding CanConfigureSystem}"
+                          Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             </MenuItem>
             <MenuItem Header="账户(_A)">
                 <MenuItem Header="退出登录" Command="{Binding LogoutCommand}"/>
@@ -116,6 +124,10 @@
                     <Border Background="#1976D2" CornerRadius="12" Padding="10,3" Margin="8,0,0,0" VerticalAlignment="Center">
                         <TextBlock Name="StationInfoText" Text="站台: 测试站01" Foreground="White" FontSize="11"/>
                     </Border>
+                    <Border Background="#FF8F00" CornerRadius="12" Padding="10,3" Margin="8,0,0,0" VerticalAlignment="Center"
+                            Visibility="{Binding ShowOperatorChrome, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock Text="操作员模式" Foreground="White" FontSize="11" FontWeight="SemiBold"/>
+                    </Border>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
                     <TextBlock Name="ProductModelText" Text="{Binding ProductModelText}" Foreground="#FFE082" FontSize="15" FontWeight="SemiBold"/>
@@ -136,8 +148,10 @@
                 <Button x:Name="QuickCreateButton" Content="🚀 快速创建测试" Padding="14,8" FontSize="12" FontWeight="SemiBold"
                         Background="#007ACC" Foreground="White" BorderThickness="0" Cursor="Hand"
                         Command="{Binding OpenQuickTestWizardCommand}" ToolTip="向导式快速创建测试配置"
-                        IsEnabled="{Binding CanManageTestPlans}"/>
-                <Rectangle Width="1" Fill="#E0E0E0" Margin="16,8"/>
+                        IsEnabled="{Binding CanManageTestPlans}"
+                        Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <Rectangle Width="1" Fill="#E0E0E0" Margin="16,8"
+                           Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 <TextBlock Text="状态:" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,6,0"/>
                 <Border VerticalAlignment="Center" Background="#E8F5E9" CornerRadius="10" Padding="10,3">
                     <TextBlock Name="StatusText" Text="{Binding StatusText}" Foreground="#2E7D32" FontWeight="SemiBold" FontSize="12"/>
@@ -188,7 +202,7 @@
                     <!-- 控制面板 -->
                     <Border Grid.Row="0" Background="#495057" Padding="10,8">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🎛️ DUT监控台" FontSize="12" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                            <TextBlock Text="{Binding MonitorTitleText}" FontSize="12" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,15,0"/>
                             
                             <TextBlock Text="使用上方工具栏进行测试控制" FontSize="10" Foreground="#ADB5BD" VerticalAlignment="Center" Margin="0,0,15,0"/>
                             
@@ -315,14 +329,24 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
                 <!-- 左侧系统状态 -->
                 <TextBlock Name="StatusTextFooter" Text="{Binding StatusTextFooter}" Foreground="White" VerticalAlignment="Center" FontSize="11" TextTrimming="CharacterEllipsis"/>
 
-                <!-- DUT测试统计 (支持千万级数字显示) -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0">
-                    <TextBlock Text="📊 DUT统计:" Foreground="#B0B0B0" FontSize="11" Margin="0,0,12,0"/>
+                <!-- UiProfile mode badge -->
+                <Border Grid.Column="1" Background="#1565C0" CornerRadius="8" Padding="8,2" Margin="10,0,0,0"
+                        VerticalAlignment="Center" ToolTip="当前 UI 配置模式 (UiProfile.Mode)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="模式:" Foreground="#90CAF9" FontSize="10" Margin="0,0,4,0"/>
+                        <TextBlock Text="{Binding UiModeDisplayName}" Foreground="White" FontSize="10" FontWeight="SemiBold"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- DUT测试统计 (支持千万级数字显示；UnitLabel 来自 UiProfile) -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0">
+                    <TextBlock Text="{Binding UnitStatsLabel}" Foreground="#B0B0B0" FontSize="11" Margin="0,0,12,0"/>
 
                     <TextBlock Text="总:" Foreground="#B0B0B0" FontSize="11" Margin="0,0,2,0"/>
                     <TextBlock Name="TotalDUTsText" Text="{Binding TotalDuts}" Foreground="White" FontWeight="Bold" FontFamily="Consolas" FontSize="11" MinWidth="55" TextAlignment="Right"/>
@@ -349,7 +373,7 @@
                 </StackPanel>
                 
                 <!-- 测试时间统计 -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0">
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0">
                     <TextBlock Text="测试时间:" Foreground="#B0B0B0" FontSize="11" Margin="0,0,4,0"/>
                     <TextBlock Name="TestDurationText" Text="00:00:00" Foreground="White" FontWeight="Bold" FontSize="11"/>
                     <TextBlock Text="|" Foreground="#B0B0B0" FontSize="11" Margin="8,0"/>
@@ -359,11 +383,12 @@
                 </StackPanel>
                 
                 <!-- 插件状态 + 当前时间 -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
                     <Border x:Name="PluginStatusBorder" Background="#27AE60" CornerRadius="10"
                             Padding="8,2" Margin="0,0,10,0" Cursor="Hand"
                             MouseLeftButtonUp="PluginStatus_Click"
-                            ToolTip="点击查看插件管理">
+                            ToolTip="点击查看插件管理"
+                            Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🔌" FontSize="11" Margin="0,0,4,0"/>
                             <TextBlock x:Name="PluginStatusText" Text="插件: 加载中..."
