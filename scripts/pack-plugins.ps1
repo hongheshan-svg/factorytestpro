@@ -123,7 +123,19 @@ foreach ($manifestFile in $manifestFiles) {
     }
 
     $entryAssemblyPath = Join-Path $destinationDir $entryAssemblyName
-    $assemblyHash = (Get-FileHash -Path $entryAssemblyPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    # 用 .NET SHA256 直接计算哈希，避免 Get-FileHash cmdlet 在某些 PowerShell 环境不可用的问题
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($entryAssemblyPath)
+        try {
+            $hashBytes = $sha.ComputeHash($stream)
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $sha.Dispose()
+    }
+    $assemblyHash = [BitConverter]::ToString($hashBytes).Replace("-", "").ToLowerInvariant()
     $manifest | Add-Member -NotePropertyName "sha256" -NotePropertyValue $assemblyHash -Force
     $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path (Join-Path $destinationDir "plugin.manifest.json") -Encoding UTF8
 
