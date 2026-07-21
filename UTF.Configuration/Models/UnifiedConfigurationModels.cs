@@ -47,7 +47,35 @@ public class DUTConfiguration
     public List<MacRange>? MacRanges { get; set; }
     public DUTConnections? Connections { get; set; }
     public CommunicationEndpoints? CommunicationEndpoints { get; set; }
+
+    /// <summary>
+    /// Generalized communication endpoints (serial, network, telnet, adb, scpi, custom).
+    /// When empty, <see cref="EndpointMapper.NormalizeEndpoints"/> synthesizes entries from
+    /// <see cref="CommunicationEndpoints"/> for backward compatibility.
+    /// </summary>
+    public List<EndpointDefinition>? Endpoints { get; set; }
+
     public NamingConfig? NamingConfig { get; set; }
+}
+
+/// <summary>
+/// A single communication endpoint used by DUT/instrument steps.
+/// Replaces the serial-ports / network-hosts-only mental model while remaining
+/// backward compatible via legacy <see cref="CommunicationEndpoints"/>.
+/// </summary>
+public class EndpointDefinition
+{
+    public string Id { get; set; } = "";
+
+    /// <summary>Endpoint kind: serial | network | telnet | adb | scpi | custom.</summary>
+    public string Kind { get; set; } = "serial";
+
+    /// <summary>Address: COM3, host:port, serial number, etc.</summary>
+    public string Address { get; set; } = "";
+
+    public string? DisplayName { get; set; }
+
+    public Dictionary<string, object>? Settings { get; set; }
 }
 
 public class ProductInfo

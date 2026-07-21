@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using UTF.Configuration;
 using UTF.UI.Models;
 
 namespace UTF.UI.Services;
@@ -100,6 +101,7 @@ public sealed class TestConfigurationBuilder : ITestConfigurationBuilder
                     SerialPorts = serialPorts,
                     NetworkHosts = networkHosts
                 },
+                Endpoints = BuildEndpoints(serialPorts, networkHosts),
                 NamingConfig = new NamingConfig
                 {
                     Template = "{TypeName}测试工位{Index}",
@@ -134,5 +136,35 @@ public sealed class TestConfigurationBuilder : ITestConfigurationBuilder
                 }
             }
         };
+    }
+
+    private static List<EndpointDefinition> BuildEndpoints(List<string> serialPorts, List<string> networkHosts)
+    {
+        var endpoints = new List<EndpointDefinition>();
+        for (var i = 0; i < serialPorts.Count; i++)
+        {
+            var port = serialPorts[i];
+            endpoints.Add(new EndpointDefinition
+            {
+                Id = $"serial-{i + 1}",
+                Kind = "serial",
+                Address = port,
+                DisplayName = port
+            });
+        }
+
+        for (var i = 0; i < networkHosts.Count; i++)
+        {
+            var host = networkHosts[i];
+            endpoints.Add(new EndpointDefinition
+            {
+                Id = $"network-{i + 1}",
+                Kind = "network",
+                Address = host,
+                DisplayName = host
+            });
+        }
+
+        return endpoints;
     }
 }

@@ -13,6 +13,8 @@ public interface IUnifiedConfigurationAdapter
     int GetMaxConcurrent(UnifiedConfiguration config);
     List<string> GetSerialPorts(UnifiedConfiguration config);
     List<string> GetNetworkHosts(UnifiedConfiguration config);
+    /// <summary>Normalized endpoint list (synthesized from legacy when empty).</summary>
+    List<EndpointDefinition> GetEndpoints(UnifiedConfiguration config);
     string GetNamingTemplate(UnifiedConfiguration config);
     string GetIdTemplate(UnifiedConfiguration config);
     bool ValidateConfiguration(UnifiedConfiguration config);

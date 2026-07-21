@@ -224,6 +224,15 @@ public sealed class UnifiedConfigurationManager : IDisposable
                     SerialPorts = new List<string> { "COM3", "COM4", "COM5", "COM6" },
                     NetworkHosts = new List<string> { "192.168.1.10", "192.168.1.11" }
                 },
+                Endpoints = new List<EndpointDefinition>
+                {
+                    new() { Id = "serial-1", Kind = "serial", Address = "COM3", DisplayName = "COM3" },
+                    new() { Id = "serial-2", Kind = "serial", Address = "COM4", DisplayName = "COM4" },
+                    new() { Id = "serial-3", Kind = "serial", Address = "COM5", DisplayName = "COM5" },
+                    new() { Id = "serial-4", Kind = "serial", Address = "COM6", DisplayName = "COM6" },
+                    new() { Id = "network-1", Kind = "network", Address = "192.168.1.10", DisplayName = "192.168.1.10" },
+                    new() { Id = "network-2", Kind = "network", Address = "192.168.1.11", DisplayName = "192.168.1.11" }
+                },
                 NamingConfig = new NamingConfig()
             },
             TestProjectConfiguration = new TestProjectConfiguration

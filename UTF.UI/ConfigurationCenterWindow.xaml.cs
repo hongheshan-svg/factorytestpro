@@ -47,6 +47,23 @@ namespace UTF.UI
             }
         }
 
+        // ── 端点编辑 ───────────────────────────────────────────────────────────────
+
+        private void EndpointsGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+        {
+            // After cell edit commits, refresh Legacy SerialPorts/NetworkHosts preview.
+            if (e.EditAction == DataGridEditAction.Commit)
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (_viewModel.RefreshEndpointsCommand.CanExecute(null))
+                    {
+                        _viewModel.RefreshEndpointsCommand.Execute(null);
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Background);
+            }
+        }
+
         // ── 命名模板预览 ─────────────────────────────────────────────────────────
 
         private void NamingTemplate_TextChanged(object sender, TextChangedEventArgs e)

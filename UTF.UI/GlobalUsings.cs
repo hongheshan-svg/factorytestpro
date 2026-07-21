@@ -10,6 +10,7 @@ global using DUTConnections = UTF.Configuration.Models.DUTConnections;
 global using ConnectionConfig = UTF.Configuration.Models.ConnectionConfig;
 global using NamingConfig = UTF.Configuration.Models.NamingConfig;
 global using CommunicationEndpoints = UTF.Configuration.Models.CommunicationEndpoints;
+global using EndpointDefinition = UTF.Configuration.Models.EndpointDefinition;
 global using TestProjectConfiguration = UTF.Configuration.Models.TestProjectConfiguration;
 global using TestMode = UTF.Configuration.Models.TestMode;
 global using TestProject = UTF.Configuration.Models.TestProject;

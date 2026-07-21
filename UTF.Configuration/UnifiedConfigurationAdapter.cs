@@ -29,14 +29,33 @@ public class UnifiedConfigurationAdapter : IUnifiedConfigurationAdapter
 
     public List<string> GetSerialPorts(UnifiedConfiguration config)
     {
-        return config?.DUTConfiguration?.CommunicationEndpoints?.SerialPorts
-            ?? new List<string> { "COM3", "COM4", "COM5", "COM6" };
+        var ports = EndpointMapper.GetSerialAddresses(config);
+        if (ports.Count > 0)
+        {
+            return ports;
+        }
+
+        // Default only when neither Endpoints nor legacy lists provide values.
+        return new List<string> { "COM3", "COM4", "COM5", "COM6" };
     }
 
     public List<string> GetNetworkHosts(UnifiedConfiguration config)
     {
-        return config?.DUTConfiguration?.CommunicationEndpoints?.NetworkHosts
-            ?? new List<string> { "192.168.1.10", "192.168.1.11" };
+        var hosts = EndpointMapper.GetNetworkAddresses(config);
+        if (hosts.Count > 0)
+        {
+            return hosts;
+        }
+
+        return new List<string> { "192.168.1.10", "192.168.1.11" };
+    }
+
+    /// <summary>
+    /// Returns normalized endpoints (synthesizes from legacy lists when empty).
+    /// </summary>
+    public List<EndpointDefinition> GetEndpoints(UnifiedConfiguration config)
+    {
+        return EndpointMapper.NormalizeEndpoints(config);
     }
 
     public string GetNamingTemplate(UnifiedConfiguration config)
@@ -90,6 +109,10 @@ public class UnifiedConfigurationAdapter : IUnifiedConfigurationAdapter
         {
             errors.Add("DefaultMaxConcurrent 必须在 1 到 256 之间");
         }
+
+        // Ensure Endpoints are synthesized from legacy lists before validation.
+        EndpointMapper.NormalizeEndpoints(config);
+        errors.AddRange(EndpointMapper.ValidateEndpoints(config.DUTConfiguration?.Endpoints));
 
         if (string.IsNullOrWhiteSpace(config.TestProjectConfiguration?.TestProject?.Id))
         {

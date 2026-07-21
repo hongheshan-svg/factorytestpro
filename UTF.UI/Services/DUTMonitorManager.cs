@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using UTF.Configuration;
 using UTF.Core;
 using UTF.Core.Mapping;
 using UTF.Plugin.Abstractions;
@@ -515,16 +516,35 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
         DUTMonitorItem item,
         UnifiedConfiguration configuration)
     {
-        var index = Math.Max(0, configuration.DUTConfiguration.CommunicationEndpoints?.SerialPorts
-            .FindIndex(port => string.Equals(port, item.SerialNumber, StringComparison.OrdinalIgnoreCase)) ?? 0);
-        var hosts = configuration.DUTConfiguration.CommunicationEndpoints?.NetworkHosts;
-        var host = hosts is { Count: > 0 } ? hosts[index % hosts.Count] : string.Empty;
+        var endpoints = EndpointMapper.NormalizeEndpoints(configuration);
+        var serialPorts = EndpointMapper.GetSerialAddresses(configuration);
+        var hosts = EndpointMapper.GetNetworkAddresses(configuration);
+
+        var index = 0;
+        if (serialPorts.Count > 0 && !string.IsNullOrWhiteSpace(item.SerialNumber))
+        {
+            var found = serialPorts.FindIndex(port =>
+                string.Equals(port, item.SerialNumber, StringComparison.OrdinalIgnoreCase));
+            if (found >= 0)
+            {
+                index = found;
+            }
+        }
+
+        var serialPort = !string.IsNullOrWhiteSpace(item.SerialNumber)
+            ? item.SerialNumber
+            : serialPorts.Count > 0
+                ? serialPorts[index % serialPorts.Count]
+                : string.Empty;
+        var host = hosts.Count > 0 ? hosts[index % hosts.Count] : string.Empty;
+
         return TestProjectMapper.BuildDutContext(
             item.DutId,
             item.DutName,
             item.DeviceType,
-            item.SerialNumber,
-            host);
+            serialPort,
+            host,
+            endpoints);
     }
 
     private static ConfigTestProject MapProject(UnifiedConfiguration configuration)

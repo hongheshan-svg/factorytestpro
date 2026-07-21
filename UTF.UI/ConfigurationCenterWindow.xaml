@@ -201,51 +201,99 @@
                                          Text="{Binding Config.DUTConfiguration.GlobalSettings.RetryCount, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableIntConverter}}"/>
                             </Grid>
 
-                            <!-- 串口配置 -->
-                            <TextBlock Text="串口配置" Style="{StaticResource SectionLabel}" Margin="0,20,0,8"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <ListBox Grid.Column="0" x:Name="SerialPortsList" Height="100" Margin="0,0,8,0"
-                                         BorderBrush="#CCC" BorderThickness="1"
-                                         ItemsSource="{Binding SerialPorts}"
-                                         SelectedItem="{Binding SelectedSerialPort, Mode=TwoWay}"/>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Top">
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                        <TextBox x:Name="NewSerialPortText" Width="80" Style="{StaticResource ModernTextBox}"
-                                                 Text="{Binding NewSerialPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0"/>
-                                        <Button Content="添加" Style="{StaticResource ActionButton}" Background="#28A745"
-                                                Padding="8,4" Command="{Binding AddSerialPortCommand}"/>
-                                    </StackPanel>
-                                    <Button Content="删除选中" Style="{StaticResource ActionButton}" Background="#DC3545"
-                                            Padding="8,4" Command="{Binding RemoveSerialPortCommand}"/>
-                                </StackPanel>
-                            </Grid>
+                            <!-- 通信端点 (Endpoints) — primary editor -->
+                            <TextBlock Text="通信端点 (Endpoints)" Style="{StaticResource SectionLabel}" Margin="0,20,0,8"/>
+                            <TextBlock Text="通用端点定义（serial / network / telnet / adb / scpi / custom）。保存时自动同步到下方 Legacy 列表。"
+                                       FontSize="11" Foreground="#666" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <DataGrid x:Name="EndpointsGrid" Height="160" Margin="0,0,0,8"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                      SelectionMode="Single" SelectionUnit="FullRow"
+                                      ItemsSource="{Binding Endpoints}"
+                                      SelectedItem="{Binding SelectedEndpoint, Mode=TwoWay}"
+                                      BorderBrush="#CCC" BorderThickness="1"
+                                      CellEditEnding="EndpointsGrid_CellEditEnding">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Id" Binding="{Binding Id, UpdateSourceTrigger=PropertyChanged}" Width="100"/>
+                                    <DataGridComboBoxColumn Header="Kind" SelectedItemBinding="{Binding Kind, UpdateSourceTrigger=PropertyChanged}" Width="100">
+                                        <DataGridComboBoxColumn.ElementStyle>
+                                            <Style TargetType="ComboBox">
+                                                <Setter Property="ItemsSource" Value="{Binding DataContext.EndpointKindOptions, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                            </Style>
+                                        </DataGridComboBoxColumn.ElementStyle>
+                                        <DataGridComboBoxColumn.EditingElementStyle>
+                                            <Style TargetType="ComboBox">
+                                                <Setter Property="ItemsSource" Value="{Binding DataContext.EndpointKindOptions, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                <Setter Property="IsEditable" Value="False"/>
+                                            </Style>
+                                        </DataGridComboBoxColumn.EditingElementStyle>
+                                    </DataGridComboBoxColumn>
+                                    <DataGridTextColumn Header="Address" Binding="{Binding Address, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                    <DataGridTextColumn Header="DisplayName" Binding="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" Width="120"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <ComboBox Width="100" Margin="0,0,8,0" VerticalAlignment="Center"
+                                          ItemsSource="{Binding EndpointKindOptions}"
+                                          SelectedItem="{Binding NewEndpointKind, Mode=TwoWay}"/>
+                                <Button Content="添加端点" Style="{StaticResource ActionButton}" Background="#28A745"
+                                        Padding="10,4" Margin="0,0,8,0" Command="{Binding AddEndpointCommand}"/>
+                                <Button Content="删除选中" Style="{StaticResource ActionButton}" Background="#DC3545"
+                                        Padding="10,4" Margin="0,0,8,0" Command="{Binding RemoveEndpointCommand}"/>
+                                <Button Content="刷新 Legacy" Style="{StaticResource ActionButton}" Background="#6C757D"
+                                        Padding="10,4" Command="{Binding RefreshEndpointsCommand}"/>
+                            </StackPanel>
 
-                            <!-- 网络主机配置 -->
-                            <TextBlock Text="网络主机配置" Style="{StaticResource SectionLabel}" Margin="0,20,0,8"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <ListBox Grid.Column="0" x:Name="NetworkHostsList" Height="100" Margin="0,0,8,0"
-                                         BorderBrush="#CCC" BorderThickness="1"
-                                         ItemsSource="{Binding NetworkHosts}"
-                                         SelectedItem="{Binding SelectedNetworkHost, Mode=TwoWay}"/>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Top">
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                        <TextBox x:Name="NewNetworkHostText" Width="120" Style="{StaticResource ModernTextBox}"
-                                                 Text="{Binding NewNetworkHost, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0"/>
-                                        <Button Content="添加" Style="{StaticResource ActionButton}" Background="#28A745"
-                                                Padding="8,4" Command="{Binding AddNetworkHostCommand}"/>
-                                    </StackPanel>
-                                    <Button Content="删除选中" Style="{StaticResource ActionButton}" Background="#DC3545"
-                                            Padding="8,4" Command="{Binding RemoveNetworkHostCommand}"/>
+                            <!-- Legacy Serial/Network (auto-synced) -->
+                            <Expander Header="Legacy (auto-synced) — SerialPorts / NetworkHosts" IsExpanded="False" Margin="0,8,0,0">
+                                <StackPanel Margin="0,8,0,0">
+                                    <TextBlock Text="只读预览（存在 Endpoints 时由端点自动同步；无 Endpoints 时可直接编辑）。"
+                                               FontSize="11" Foreground="#888" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                    <TextBlock Text="串口配置 (SerialPorts)" Style="{StaticResource SectionLabel}" Margin="0,0,0,8"/>
+                                    <Grid IsEnabled="{Binding LegacyListsEditable}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ListBox Grid.Column="0" x:Name="SerialPortsList" Height="80" Margin="0,0,8,0"
+                                                 BorderBrush="#CCC" BorderThickness="1"
+                                                 ItemsSource="{Binding SerialPorts}"
+                                                 SelectedItem="{Binding SelectedSerialPort, Mode=TwoWay}"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                <TextBox x:Name="NewSerialPortText" Width="80" Style="{StaticResource ModernTextBox}"
+                                                         Text="{Binding NewSerialPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0"/>
+                                                <Button Content="添加" Style="{StaticResource ActionButton}" Background="#28A745"
+                                                        Padding="8,4" Command="{Binding AddSerialPortCommand}"/>
+                                            </StackPanel>
+                                            <Button Content="删除选中" Style="{StaticResource ActionButton}" Background="#DC3545"
+                                                    Padding="8,4" Command="{Binding RemoveSerialPortCommand}"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <TextBlock Text="网络主机配置 (NetworkHosts)" Style="{StaticResource SectionLabel}" Margin="0,16,0,8"/>
+                                    <Grid IsEnabled="{Binding LegacyListsEditable}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ListBox Grid.Column="0" x:Name="NetworkHostsList" Height="80" Margin="0,0,8,0"
+                                                 BorderBrush="#CCC" BorderThickness="1"
+                                                 ItemsSource="{Binding NetworkHosts}"
+                                                 SelectedItem="{Binding SelectedNetworkHost, Mode=TwoWay}"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                <TextBox x:Name="NewNetworkHostText" Width="120" Style="{StaticResource ModernTextBox}"
+                                                         Text="{Binding NewNetworkHost, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0"/>
+                                                <Button Content="添加" Style="{StaticResource ActionButton}" Background="#28A745"
+                                                        Padding="8,4" Command="{Binding AddNetworkHostCommand}"/>
+                                            </StackPanel>
+                                            <Button Content="删除选中" Style="{StaticResource ActionButton}" Background="#DC3545"
+                                                    Padding="8,4" Command="{Binding RemoveNetworkHostCommand}"/>
+                                        </StackPanel>
+                                    </Grid>
                                 </StackPanel>
-                            </Grid>
+                            </Expander>
 
                             <!-- 命名模板 -->
                             <TextBlock Text="命名模板" Style="{StaticResource SectionLabel}" Margin="0,20,0,8"/>

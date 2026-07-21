@@ -137,12 +137,8 @@ public sealed class FileUnifiedConfigurationService : IConfigurationService, IDi
             DefaultMaxConcurrent = dut?.GlobalSettings?.DefaultMaxConcurrent ?? 16,
             TestTimeout = dut?.GlobalSettings?.TestTimeout ?? 300,
             RetryCount = dut?.GlobalSettings?.RetryCount ?? 3,
-            SerialPorts = dut?.CommunicationEndpoints?.SerialPorts != null
-                ? new List<string>(dut.CommunicationEndpoints.SerialPorts)
-                : new List<string>(),
-            NetworkHosts = dut?.CommunicationEndpoints?.NetworkHosts != null
-                ? new List<string>(dut.CommunicationEndpoints.NetworkHosts)
-                : new List<string>()
+            SerialPorts = EndpointMapper.GetSerialAddresses(unified),
+            NetworkHosts = EndpointMapper.GetNetworkAddresses(unified)
         };
     }
 

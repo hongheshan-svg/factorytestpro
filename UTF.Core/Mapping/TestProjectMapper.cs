@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UTF.Configuration;
+using UTF.Configuration.Models;
 
 namespace UTF.Core.Mapping;
 
@@ -81,15 +83,17 @@ public static class TestProjectMapper
     /// <summary>
     /// Builds per-DUT execution context (SerialPort / Host / identity keys) from endpoint lists.
     /// Index is zero-based among the provided DUT id list.
+    /// When <paramref name="endpoints"/> is provided, also injects <c>Endpoint:{id}</c> address keys.
     /// </summary>
     public static Dictionary<string, object> BuildDutContext(
         string dutId,
         string? dutName,
         string? dutType,
         string? serialPort,
-        string? host)
+        string? host,
+        IEnumerable<EndpointDefinition>? endpoints = null)
     {
-        return new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+        var context = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
         {
             ["SerialPort"] = serialPort ?? string.Empty,
             ["Host"] = host ?? string.Empty,
@@ -97,6 +101,9 @@ public static class TestProjectMapper
             ["DutName"] = dutName ?? dutId,
             ["DutType"] = dutType ?? string.Empty
         };
+
+        EndpointMapper.AddEndpointContextKeys(context, endpoints);
+        return context;
     }
 
     private static ConfigTestStep NormalizeStep(ConfigTestStep step, int defaultRetryCount)

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using UTF.Configuration;
 using UTF.UI.Models;
 using UTF.UI.Services;
 
@@ -71,16 +72,26 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     [ObservableProperty]
     private string _theme = "Light";
 
-    // ────────────────── 串口 / 网络主机 / 测试步骤集合 ──────────────────
+    // ────────────────── 端点 / 串口 / 网络主机 / 测试步骤集合 ──────────────────
 
-    /// <summary>串口列表。ListBox 双向绑定。</summary>
+    /// <summary>通信端点列表（主编辑源）。DataGrid 双向绑定。</summary>
+    public ObservableCollection<EndpointDefinition> Endpoints { get; } = new();
+
+    /// <summary>Kind 下拉可选值。</summary>
+    public IReadOnlyList<string> EndpointKindOptions { get; } = EndpointMapper.KnownKinds;
+
+    /// <summary>串口列表（Legacy，由 Endpoints 自动同步）。</summary>
     public ObservableCollection<string> SerialPorts { get; } = new();
 
-    /// <summary>网络主机列表。ListBox 双向绑定。</summary>
+    /// <summary>网络主机列表（Legacy，由 Endpoints 自动同步）。</summary>
     public ObservableCollection<string> NetworkHosts { get; } = new();
 
     /// <summary>测试步骤列表。DataGrid 双向绑定。</summary>
     public ObservableCollection<TestStepConfig> TestSteps { get; } = new();
+
+    /// <summary>当前选中的端点（用于删除按钮）。</summary>
+    [ObservableProperty]
+    private EndpointDefinition? _selectedEndpoint;
 
     /// <summary>当前选中的串口（用于删除按钮）。</summary>
     [ObservableProperty]
@@ -89,6 +100,12 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     /// <summary>当前选中的网络主机（用于删除按钮）。</summary>
     [ObservableProperty]
     private string? _selectedNetworkHost;
+
+    /// <summary>是否存在端点（用于禁用 legacy 列表编辑）。</summary>
+    public bool HasEndpoints => Endpoints.Count > 0;
+
+    /// <summary>Legacy 列表是否可直接编辑（无 Endpoints 时）。</summary>
+    public bool LegacyListsEditable => Endpoints.Count == 0;
 
     /// <summary>当前选中的测试步骤（用于编辑/删除/移动）。</summary>
     [ObservableProperty]
@@ -176,6 +193,10 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     [ObservableProperty]
     private string _newNetworkHost = "192.168.1.";
 
+    /// <summary>新增端点默认 Kind。</summary>
+    [ObservableProperty]
+    private string _newEndpointKind = "serial";
+
     /// <summary>
     /// 从 <see cref="ConfigurationManager"/> 异步加载配置到 <see cref="Config"/>，
     /// 并同步填充所有集合与选中值。
@@ -205,24 +226,18 @@ public partial class ConfigurationCenterViewModel : ObservableObject
 
         Theme = string.IsNullOrEmpty(sys.Theme) ? "Light" : sys.Theme;
 
-        var endpoints = Config.DUTConfiguration?.CommunicationEndpoints;
-        SerialPorts.Clear();
-        if (endpoints?.SerialPorts != null)
+        // Prefer Endpoints; synthesize from legacy SerialPorts/NetworkHosts when empty.
+        EndpointMapper.NormalizeEndpoints(Config);
+        Endpoints.Clear();
+        if (Config.DUTConfiguration?.Endpoints != null)
         {
-            foreach (var port in endpoints.SerialPorts)
+            foreach (var ep in Config.DUTConfiguration.Endpoints)
             {
-                SerialPorts.Add(port);
+                Endpoints.Add(CloneEndpoint(ep));
             }
         }
 
-        NetworkHosts.Clear();
-        if (endpoints?.NetworkHosts != null)
-        {
-            foreach (var host in endpoints.NetworkHosts)
-            {
-                NetworkHosts.Add(host);
-            }
-        }
+        RefreshLegacyListsFromEndpoints();
 
         TestSteps.Clear();
         var steps = Config.TestProjectConfiguration?.TestProject?.Steps;
@@ -235,8 +250,10 @@ public partial class ConfigurationCenterViewModel : ObservableObject
         }
 
         SelectedStep = null;
+        SelectedEndpoint = null;
         SelectedSerialPort = null;
         SelectedNetworkHost = null;
+        NotifyEndpointCollectionChanged();
     }
 
     /// <summary>将各可观察集合与选中值写回 <see cref="Config"/>。</summary>
@@ -248,13 +265,79 @@ public partial class ConfigurationCenterViewModel : ObservableObject
         sys.Theme = Theme ?? "Light";
 
         Config.DUTConfiguration ??= new DUTConfiguration();
-        Config.DUTConfiguration.CommunicationEndpoints ??= new CommunicationEndpoints();
-        Config.DUTConfiguration.CommunicationEndpoints.SerialPorts = SerialPorts.ToList();
-        Config.DUTConfiguration.CommunicationEndpoints.NetworkHosts = NetworkHosts.ToList();
+        Config.DUTConfiguration.Endpoints = Endpoints
+            .Select(CloneEndpoint)
+            .ToList();
+
+        // Endpoints are source of truth → mirror into legacy SerialPorts/NetworkHosts.
+        EndpointMapper.MirrorEndpointsToLegacy(Config);
+
+        // If Endpoints empty and user still edited legacy lists, keep those.
+        if (Endpoints.Count == 0)
+        {
+            Config.DUTConfiguration.CommunicationEndpoints ??= new CommunicationEndpoints();
+            Config.DUTConfiguration.CommunicationEndpoints.SerialPorts = SerialPorts.ToList();
+            Config.DUTConfiguration.CommunicationEndpoints.NetworkHosts = NetworkHosts.ToList();
+        }
+        else
+        {
+            RefreshLegacyListsFromEndpoints();
+        }
 
         Config.TestProjectConfiguration ??= new TestProjectConfiguration();
         Config.TestProjectConfiguration.TestProject ??= new TestProject();
         Config.TestProjectConfiguration.TestProject.Steps = TestSteps.ToList();
+    }
+
+    private void RefreshLegacyListsFromEndpoints()
+    {
+        var endpoints = Config.DUTConfiguration?.CommunicationEndpoints;
+        // After mirror, CommunicationEndpoints holds derived lists; if not mirrored yet, derive live.
+        var serial = Endpoints.Count > 0
+            ? Endpoints.Where(e => EndpointMapper.IsSerialLike(e.Kind) && !string.IsNullOrWhiteSpace(e.Address))
+                .Select(e => e.Address.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
+            : endpoints?.SerialPorts?.ToList() ?? new List<string>();
+
+        var hosts = Endpoints.Count > 0
+            ? Endpoints.Where(e => EndpointMapper.IsNetworkLike(e.Kind) && !string.IsNullOrWhiteSpace(e.Address))
+                .Select(e => e.Address.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
+            : endpoints?.NetworkHosts?.ToList() ?? new List<string>();
+
+        SerialPorts.Clear();
+        foreach (var port in serial)
+        {
+            SerialPorts.Add(port);
+        }
+
+        NetworkHosts.Clear();
+        foreach (var host in hosts)
+        {
+            NetworkHosts.Add(host);
+        }
+    }
+
+    private void NotifyEndpointCollectionChanged()
+    {
+        OnPropertyChanged(nameof(HasEndpoints));
+        OnPropertyChanged(nameof(LegacyListsEditable));
+    }
+
+    private static EndpointDefinition CloneEndpoint(EndpointDefinition source)
+    {
+        return new EndpointDefinition
+        {
+            Id = source.Id ?? string.Empty,
+            Kind = string.IsNullOrWhiteSpace(source.Kind) ? "serial" : source.Kind,
+            Address = source.Address ?? string.Empty,
+            DisplayName = source.DisplayName,
+            Settings = source.Settings == null
+                ? null
+                : new Dictionary<string, object>(source.Settings)
+        };
     }
 
     /// <summary>由显示文本反查语言代码。</summary>
@@ -278,6 +361,7 @@ public partial class ConfigurationCenterViewModel : ObservableObject
         config.DUTConfiguration.ProductInfo ??= new ProductInfo();
         config.DUTConfiguration.GlobalSettings ??= new GlobalSettings();
         config.DUTConfiguration.CommunicationEndpoints ??= new CommunicationEndpoints();
+        config.DUTConfiguration.Endpoints ??= new List<EndpointDefinition>();
         config.DUTConfiguration.NamingConfig ??= new NamingConfig();
         config.TestProjectConfiguration ??= new TestProjectConfiguration();
         config.TestProjectConfiguration.TestProject ??= new TestProject();
@@ -349,12 +433,78 @@ public partial class ConfigurationCenterViewModel : ObservableObject
         ValidationStatusColor = "#007ACC";
     }
 
-    // ────────────────── 串口管理命令 ──────────────────
+    // ────────────────── 端点管理命令 ──────────────────
+
+    /// <summary>新增通信端点。</summary>
+    [RelayCommand]
+    private void AddEndpoint()
+    {
+        var kind = string.IsNullOrWhiteSpace(NewEndpointKind) ? "serial" : NewEndpointKind.Trim().ToLowerInvariant();
+        var index = Endpoints.Count(e => string.Equals(e.Kind, kind, StringComparison.OrdinalIgnoreCase)) + 1;
+        var idBase = kind;
+        var id = $"{idBase}-{index}";
+        while (Endpoints.Any(e => string.Equals(e.Id, id, StringComparison.OrdinalIgnoreCase)))
+        {
+            index++;
+            id = $"{idBase}-{index}";
+        }
+
+        var address = kind switch
+        {
+            "serial" => $"COM{2 + Endpoints.Count(e => EndpointMapper.IsSerialLike(e.Kind))}",
+            "network" or "telnet" => $"192.168.1.{10 + Endpoints.Count(e => EndpointMapper.IsNetworkLike(e.Kind))}",
+            "adb" => "emulator-5554",
+            "scpi" => "TCPIP0::192.168.1.100::INSTR",
+            _ => string.Empty
+        };
+
+        var ep = new EndpointDefinition
+        {
+            Id = id,
+            Kind = kind,
+            Address = address,
+            DisplayName = address
+        };
+        Endpoints.Add(ep);
+        SelectedEndpoint = ep;
+        RefreshLegacyListsFromEndpoints();
+        NotifyEndpointCollectionChanged();
+    }
+
+    /// <summary>删除当前选中的通信端点。</summary>
+    [RelayCommand]
+    private void RemoveEndpoint()
+    {
+        if (SelectedEndpoint is { } ep)
+        {
+            Endpoints.Remove(ep);
+            SelectedEndpoint = null;
+            RefreshLegacyListsFromEndpoints();
+            NotifyEndpointCollectionChanged();
+        }
+    }
+
+    /// <summary>端点编辑后刷新 legacy 列表显示。</summary>
+    [RelayCommand]
+    private void RefreshEndpoints()
+    {
+        RefreshLegacyListsFromEndpoints();
+        OnPropertyChanged(nameof(Endpoints));
+        NotifyEndpointCollectionChanged();
+    }
+
+    // ────────────────── 串口管理命令（Legacy） ──────────────────
 
     /// <summary>新增串口。读取 <see cref="NewSerialPort"/>，校验后加入集合。</summary>
     [RelayCommand]
     private void AddSerialPort()
     {
+        if (!LegacyListsEditable)
+        {
+            _dialogService.ShowInformation("请在「通信端点」中编辑；Legacy 列表由端点自动同步。");
+            return;
+        }
+
         var port = (NewSerialPort ?? string.Empty).Trim().ToUpperInvariant();
         if (string.IsNullOrEmpty(port) || !port.StartsWith("COM", StringComparison.OrdinalIgnoreCase))
         {
@@ -374,6 +524,12 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     [RelayCommand]
     private void RemoveSerialPort()
     {
+        if (!LegacyListsEditable)
+        {
+            _dialogService.ShowInformation("请在「通信端点」中编辑；Legacy 列表由端点自动同步。");
+            return;
+        }
+
         if (SelectedSerialPort is { } port)
         {
             SerialPorts.Remove(port);
@@ -381,12 +537,18 @@ public partial class ConfigurationCenterViewModel : ObservableObject
         }
     }
 
-    // ────────────────── 网络主机管理命令 ──────────────────
+    // ────────────────── 网络主机管理命令（Legacy） ──────────────────
 
     /// <summary>新增网络主机。</summary>
     [RelayCommand]
     private void AddNetworkHost()
     {
+        if (!LegacyListsEditable)
+        {
+            _dialogService.ShowInformation("请在「通信端点」中编辑；Legacy 列表由端点自动同步。");
+            return;
+        }
+
         var host = (NewNetworkHost ?? string.Empty).Trim();
         if (string.IsNullOrEmpty(host))
         {
@@ -406,6 +568,12 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     [RelayCommand]
     private void RemoveNetworkHost()
     {
+        if (!LegacyListsEditable)
+        {
+            _dialogService.ShowInformation("请在「通信端点」中编辑；Legacy 列表由端点自动同步。");
+            return;
+        }
+
         if (SelectedNetworkHost is { } host)
         {
             NetworkHosts.Remove(host);
