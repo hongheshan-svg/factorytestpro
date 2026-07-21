@@ -9,12 +9,11 @@ using UTF.Plugin.Abstractions;
 namespace UTF.Plugins.Drivers;
 
 /// <summary>
-/// Telnet 通信驱动插件 - 通过 Telnet 协议与 DUT 进行网络通信
+/// Telnet 通信驱动插件 - 通过 Telnet 协议与 DUT 进行网络通信。
+/// 每个 host:port 端点独立连接，支持多 DUT 并行。
 /// </summary>
 public sealed class TelnetDriverPlugin : DeviceDriverPluginBase
 {
-    private TcpClient? _client;
-    private NetworkStream? _stream;
     private int _port = 23;
     private int _readTimeoutMs = 3000;
     private string _lineEnding = "\r\n";
@@ -68,8 +67,6 @@ public sealed class TelnetDriverPlugin : DeviceDriverPluginBase
 
     public override bool CanHandle(string stepType, string channel)
     {
-        // AND 语义：stepType 与 channel 必须同时匹配。
-        // 历史上支持 network/telnet/tcp 多通道，全部声明在集合中即可保持匹配。
         var supportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "network", "telnet", "tcp"
@@ -92,7 +89,7 @@ public sealed class TelnetDriverPlugin : DeviceDriverPluginBase
         return base.ResolveEndpoint(request);
     }
 
-    protected override async Task<bool> ConnectCoreAsync(string endpoint, CancellationToken ct)
+    protected override async Task<object?> CreateConnectionAsync(string endpoint, CancellationToken ct)
     {
         try
         {
@@ -100,153 +97,167 @@ public sealed class TelnetDriverPlugin : DeviceDriverPluginBase
             var host = parts[0];
             var port = parts.Length > 1 && int.TryParse(parts[1], out var p) ? p : _port;
 
-            _client = new TcpClient();
-            await _client.ConnectAsync(host, port, ct).ConfigureAwait(false);
+            var client = new TcpClient();
+            await client.ConnectAsync(host, port, ct).ConfigureAwait(false);
 
-            _stream = _client.GetStream();
-            _stream.ReadTimeout = _readTimeoutMs;
-            _stream.WriteTimeout = _readTimeoutMs;
+            var stream = client.GetStream();
+            stream.ReadTimeout = _readTimeoutMs;
+            stream.WriteTimeout = _readTimeoutMs;
 
-            // 读取并丢弃初始 Telnet 协商字节和欢迎信息
-            await DrainInitialDataAsync(ct).ConfigureAwait(false);
-
-            return true;
+            var state = new TelnetConnection(client, stream, _encoding, _readTimeoutMs, _promptPattern, _lineEnding);
+            await state.DrainInitialDataAsync(ct).ConfigureAwait(false);
+            return state;
         }
         catch
         {
-            CleanupConnection();
-            return false;
+            return null;
         }
     }
 
-    protected override async Task<string> SendCommandCoreAsync(string command, CancellationToken ct)
+    protected override Task<string> SendCommandOnConnectionAsync(object connection, string command, CancellationToken ct)
     {
-        if (_stream == null || !(_client?.Connected ?? false))
+        var state = (TelnetConnection)connection;
+        return state.SendCommandAsync(command, ct);
+    }
+
+    protected override Task CloseConnectionAsync(object connection, CancellationToken ct)
+    {
+        if (connection is TelnetConnection state)
         {
-            throw new InvalidOperationException("Telnet 连接未建立");
+            state.Dispose();
         }
 
-        var commandBytes = _encoding.GetBytes(command + _lineEnding);
-        await _stream.WriteAsync(commandBytes, ct).ConfigureAwait(false);
-        await _stream.FlushAsync(ct).ConfigureAwait(false);
-
-        return await ReadResponseAsync(ct).ConfigureAwait(false);
-    }
-
-    protected override Task DisconnectCoreAsync(CancellationToken ct)
-    {
-        CleanupConnection();
         return Task.CompletedTask;
     }
 
-    private async Task<string> ReadResponseAsync(CancellationToken ct)
+    private sealed class TelnetConnection : IDisposable
     {
-        var buffer = new byte[4096];
-        var response = new StringBuilder();
+        private readonly TcpClient _client;
+        private readonly NetworkStream _stream;
+        private readonly Encoding _encoding;
+        private readonly int _readTimeoutMs;
+        private readonly string _promptPattern;
+        private readonly string _lineEnding;
 
-        // 用链接取消令牌施加读取超时上限，避免 DataAvailable 轮询 + Task.Delay 的忙等。
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        linkedCts.CancelAfter(_readTimeoutMs);
-
-        try
+        public TelnetConnection(
+            TcpClient client,
+            NetworkStream stream,
+            Encoding encoding,
+            int readTimeoutMs,
+            string promptPattern,
+            string lineEnding)
         {
-            while (!linkedCts.IsCancellationRequested)
+            _client = client;
+            _stream = stream;
+            _encoding = encoding;
+            _readTimeoutMs = readTimeoutMs;
+            _promptPattern = promptPattern;
+            _lineEnding = lineEnding;
+        }
+
+        public async Task DrainInitialDataAsync(CancellationToken ct)
+        {
+            var buffer = new byte[4096];
+            try
             {
-                int bytesRead;
-                try
+                await Task.Delay(500, ct).ConfigureAwait(false);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                linkedCts.CancelAfter(_readTimeoutMs);
+                while (_stream.DataAvailable)
                 {
-                    bytesRead = await _stream!.ReadAsync(buffer, linkedCts.Token).ConfigureAwait(false);
+                    _ = await _stream.ReadAsync(buffer.AsMemory(0, buffer.Length), linkedCts.Token).ConfigureAwait(false);
                 }
-                catch (IOException)
-                {
-                    break;
-                }
+            }
+            catch
+            {
+                // 忽略初始读取错误
+            }
+        }
 
-                if (bytesRead > 0)
-                {
-                    var chunk = FilterTelnetNegotiation(buffer, bytesRead);
-                    response.Append(_encoding.GetString(chunk));
+        public async Task<string> SendCommandAsync(string command, CancellationToken ct)
+        {
+            if (!_client.Connected)
+            {
+                throw new InvalidOperationException("Telnet 连接未建立");
+            }
 
-                    // 检查是否到达提示符
-                    if (response.ToString().TrimEnd().EndsWith(_promptPattern, StringComparison.OrdinalIgnoreCase))
+            var commandBytes = _encoding.GetBytes(command + _lineEnding);
+            await _stream.WriteAsync(commandBytes, ct).ConfigureAwait(false);
+            await _stream.FlushAsync(ct).ConfigureAwait(false);
+
+            return await ReadResponseAsync(ct).ConfigureAwait(false);
+        }
+
+        private async Task<string> ReadResponseAsync(CancellationToken ct)
+        {
+            var buffer = new byte[4096];
+            var response = new StringBuilder();
+
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            linkedCts.CancelAfter(_readTimeoutMs);
+
+            try
+            {
+                while (!linkedCts.IsCancellationRequested)
+                {
+                    int bytesRead;
+                    try
+                    {
+                        bytesRead = await _stream.ReadAsync(buffer, linkedCts.Token).ConfigureAwait(false);
+                    }
+                    catch (IOException)
+                    {
+                        break;
+                    }
+
+                    if (bytesRead > 0)
+                    {
+                        var chunk = FilterTelnetNegotiation(buffer, bytesRead);
+                        response.Append(_encoding.GetString(chunk));
+
+                        if (response.ToString().TrimEnd().EndsWith(_promptPattern, StringComparison.OrdinalIgnoreCase))
+                        {
+                            break;
+                        }
+                    }
+                    else
                     {
                         break;
                     }
                 }
+            }
+            catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && !ct.IsCancellationRequested)
+            {
+                // 读取超时：返回已收到的内容
+            }
+
+            return response.ToString().Trim();
+        }
+
+        private static byte[] FilterTelnetNegotiation(byte[] data, int length)
+        {
+            var filtered = new MemoryStream();
+            int i = 0;
+            while (i < length)
+            {
+                if (data[i] == 0xFF && i + 2 <= length)
+                {
+                    i += 3;
+                }
                 else
                 {
-                    // 对端关闭
-                    break;
+                    filtered.WriteByte(data[i]);
+                    i++;
                 }
             }
+
+            return filtered.ToArray();
         }
-        catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && !ct.IsCancellationRequested)
+
+        public void Dispose()
         {
-            // 读取超时：返回已收到的内容（若有），与历史行为一致
+            _stream.Dispose();
+            _client.Dispose();
         }
-
-        return response.ToString().Trim();
-    }
-
-    private async Task DrainInitialDataAsync(CancellationToken ct)
-    {
-        var buffer = new byte[4096];
-        try
-        {
-            await Task.Delay(500, ct).ConfigureAwait(false);
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            linkedCts.CancelAfter(_readTimeoutMs);
-            while (_stream!.DataAvailable)
-            {
-                _ = await _stream.ReadAsync(buffer.AsMemory(0, buffer.Length), linkedCts.Token).ConfigureAwait(false);
-            }
-        }
-        catch
-        {
-            // 忽略初始读取错误
-        }
-    }
-
-    /// <summary>
-    /// 过滤 Telnet IAC 协商序列 (0xFF ...)
-    /// </summary>
-    private static byte[] FilterTelnetNegotiation(byte[] data, int length)
-    {
-        var filtered = new MemoryStream();
-        int i = 0;
-        while (i < length)
-        {
-            // IAC 序列: FF XX XX — 跳过 3 字节。注意边界：i+2 <= length 才是一个完整的三字节序列。
-            // TODO(RFC854): 当前仅跳过固定 3 字节；应进一步处理 SB...SE 子协商可变长度。
-            if (data[i] == 0xFF && i + 2 <= length)
-            {
-                i += 3;
-            }
-            else
-            {
-                filtered.WriteByte(data[i]);
-                i++;
-            }
-        }
-
-        return filtered.ToArray();
-    }
-
-    private void CleanupConnection()
-    {
-        _stream?.Dispose();
-        _stream = null;
-        _client?.Dispose();
-        _client = null;
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            CleanupConnection();
-        }
-
-        base.Dispose(disposing);
     }
 }

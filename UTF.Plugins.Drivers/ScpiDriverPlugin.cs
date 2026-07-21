@@ -9,13 +9,11 @@ using UTF.Plugin.Abstractions;
 namespace UTF.Plugins.Drivers;
 
 /// <summary>
-/// SCPI 仪器通信驱动插件 - 通过 TCP/GPIB 与示波器、万用表、电源等仪器通信
-/// 支持标准 SCPI 命令（*IDN?, *RST, MEASure 等）
+/// SCPI 仪器通信驱动插件 - 通过 TCP/GPIB 与示波器、万用表、电源等仪器通信。
+/// 每个仪器地址独立连接，支持多仪器并行。
 /// </summary>
 public sealed class ScpiDriverPlugin : DeviceDriverPluginBase
 {
-    private TcpClient? _client;
-    private NetworkStream? _stream;
     private int _port = 5025;
     private int _readTimeoutMs = 5000;
     private string _lineEnding = "\n";
@@ -52,7 +50,6 @@ public sealed class ScpiDriverPlugin : DeviceDriverPluginBase
 
     public override bool CanHandle(string stepType, string channel)
     {
-        // AND 语义：stepType 与 channel 必须同时匹配。
         var supportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "instrument", "scpi", "gpib", "measure"
@@ -66,7 +63,6 @@ public sealed class ScpiDriverPlugin : DeviceDriverPluginBase
 
     protected override string ResolveEndpoint(StepExecutionRequest request)
     {
-        // SCPI 仪器通常通过 Host:Port 连接 (LXI)
         if (request.Parameters.TryGetValue("InstrumentAddress", out var addr) && addr != null)
         {
             return addr.ToString()!;
@@ -81,7 +77,7 @@ public sealed class ScpiDriverPlugin : DeviceDriverPluginBase
         return base.ResolveEndpoint(request);
     }
 
-    protected override async Task<bool> ConnectCoreAsync(string endpoint, CancellationToken ct)
+    protected override async Task<object?> CreateConnectionAsync(string endpoint, CancellationToken ct)
     {
         try
         {
@@ -89,106 +85,126 @@ public sealed class ScpiDriverPlugin : DeviceDriverPluginBase
             var host = parts[0];
             var port = parts.Length > 1 && int.TryParse(parts[1], out var p) ? p : _port;
 
-            _client = new TcpClient();
-            await _client.ConnectAsync(host, port, ct).ConfigureAwait(false);
+            var client = new TcpClient();
+            await client.ConnectAsync(host, port, ct).ConfigureAwait(false);
 
-            _stream = _client.GetStream();
-            _stream.ReadTimeout = _readTimeoutMs;
-            _stream.WriteTimeout = _readTimeoutMs;
+            var stream = client.GetStream();
+            stream.ReadTimeout = _readTimeoutMs;
+            stream.WriteTimeout = _readTimeoutMs;
 
-            return true;
+            return new ScpiConnection(client, stream, _encoding, _readTimeoutMs, _lineEnding);
         }
         catch
         {
-            CleanupConnection();
-            return false;
+            return null;
         }
     }
 
-    protected override async Task<string> SendCommandCoreAsync(string command, CancellationToken ct)
+    protected override Task<string> SendCommandOnConnectionAsync(object connection, string command, CancellationToken ct)
     {
-        if (_stream == null || !(_client?.Connected ?? false))
-        {
-            throw new InvalidOperationException("SCPI 连接未建立");
-        }
-
-        var commandBytes = _encoding.GetBytes(command + _lineEnding);
-        await _stream.WriteAsync(commandBytes, ct).ConfigureAwait(false);
-        await _stream.FlushAsync(ct).ConfigureAwait(false);
-
-        // SCPI 查询命令以 ? 结尾，需要读取响应；设置命令无响应
-        if (command.TrimEnd().EndsWith('?'))
-        {
-            return await ReadScpiResponseAsync(ct).ConfigureAwait(false);
-        }
-
-        // 对于设置命令，发送后短暂等待确保仪器处理
-        await Task.Delay(50, ct).ConfigureAwait(false);
-        return "OK";
+        var state = (ScpiConnection)connection;
+        return state.SendCommandAsync(command, ct);
     }
 
     protected override string PostProcessOutput(string output, StepExecutionRequest request)
     {
-        // SCPI 响应通常以 \n 结尾，去除多余空白
         return output.Trim();
     }
 
-    protected override Task DisconnectCoreAsync(CancellationToken ct)
+    protected override Task CloseConnectionAsync(object connection, CancellationToken ct)
     {
-        CleanupConnection();
+        if (connection is ScpiConnection state)
+        {
+            state.Dispose();
+        }
+
         return Task.CompletedTask;
     }
 
-    private async Task<string> ReadScpiResponseAsync(CancellationToken ct)
+    private sealed class ScpiConnection : IDisposable
     {
-        var buffer = new byte[4096];
-        var response = new StringBuilder();
+        private readonly TcpClient _client;
+        private readonly NetworkStream _stream;
+        private readonly Encoding _encoding;
+        private readonly int _readTimeoutMs;
+        private readonly string _lineEnding;
 
-        while (!ct.IsCancellationRequested)
+        public ScpiConnection(
+            TcpClient client,
+            NetworkStream stream,
+            Encoding encoding,
+            int readTimeoutMs,
+            string lineEnding)
         {
-            try
-            {
-                var bytesRead = await _stream!.ReadAsync(buffer, ct).ConfigureAwait(false);
-                if (bytesRead > 0)
-                {
-                    var chunk = _encoding.GetString(buffer, 0, bytesRead);
-                    response.Append(chunk);
+            _client = client;
+            _stream = stream;
+            _encoding = encoding;
+            _readTimeoutMs = readTimeoutMs;
+            _lineEnding = lineEnding;
+        }
 
-                    // SCPI 响应以 \n 结尾
-                    if (chunk.EndsWith('\n'))
+        public async Task<string> SendCommandAsync(string command, CancellationToken ct)
+        {
+            if (!_client.Connected)
+            {
+                throw new InvalidOperationException("SCPI 连接未建立");
+            }
+
+            var commandBytes = _encoding.GetBytes(command + _lineEnding);
+            await _stream.WriteAsync(commandBytes, ct).ConfigureAwait(false);
+            await _stream.FlushAsync(ct).ConfigureAwait(false);
+
+            if (command.TrimEnd().EndsWith('?'))
+            {
+                return await ReadScpiResponseAsync(ct).ConfigureAwait(false);
+            }
+
+            await Task.Delay(50, ct).ConfigureAwait(false);
+            return "OK";
+        }
+
+        private async Task<string> ReadScpiResponseAsync(CancellationToken ct)
+        {
+            var buffer = new byte[4096];
+            var response = new StringBuilder();
+
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            linkedCts.CancelAfter(_readTimeoutMs);
+
+            while (!linkedCts.IsCancellationRequested)
+            {
+                try
+                {
+                    var bytesRead = await _stream.ReadAsync(buffer.AsMemory(0, buffer.Length), linkedCts.Token)
+                        .ConfigureAwait(false);
+                    if (bytesRead <= 0)
+                    {
+                        break;
+                    }
+
+                    response.Append(_encoding.GetString(buffer, 0, bytesRead));
+                    if (response.ToString().Contains('\n'))
                     {
                         break;
                     }
                 }
-                else
+                catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && !ct.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (IOException)
                 {
                     break;
                 }
             }
-            catch (IOException)
-            {
-                break;
-            }
+
+            return response.ToString();
         }
 
-        return response.ToString().Trim();
-    }
-
-    private void CleanupConnection()
-    {
-        _stream?.Dispose();
-        _stream = null;
-        _client?.Dispose();
-        _client = null;
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
+        public void Dispose()
         {
-            CleanupConnection();
+            _stream.Dispose();
+            _client.Dispose();
         }
-
-        base.Dispose(disposing);
     }
 }

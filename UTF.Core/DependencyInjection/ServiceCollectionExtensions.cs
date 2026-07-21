@@ -28,14 +28,13 @@ public static class ServiceCollectionExtensions
                 LogFilePath = "logs/utf-global.log"
             }));
 
-        // 配置驱动测试引擎（单例 - 无状态且线程安全；被 Singleton 编排器与 DUTMonitorManager 复用，
-        // 避免被 Singleton 捕获的 Transient 实例无法被 dispose 的 captive dependency 反模式）
+        // 配置驱动测试引擎（单例 - 无状态且线程安全；被 Singleton 编排器复用）
         services.AddSingleton<ConfigDrivenTestEngine>();
 
         // 配置驱动测试验证器（瞬态）
         services.AddTransient<ConfigDrivenTestValidator>();
 
-        // 配置驱动测试编排器（单例 - 持有共享会话状态）
+        // 配置驱动测试编排器（单例 - 持有共享会话状态；UI 主路径唯一会话入口）
         services.AddSingleton<ConfigDrivenTestOrchestrator>();
 
         // 重试策略（单例 - 被引擎复用）

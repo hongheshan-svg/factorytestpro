@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading;
@@ -7,25 +8,41 @@ using System.Threading.Tasks;
 namespace UTF.Plugin.Abstractions;
 
 /// <summary>
-/// 设备驱动插件基类 - 提供通用的连接管理、超时控制和结果封装
-/// 子类只需实现 ConnectCoreAsync / SendCommandCoreAsync / DisconnectCoreAsync
+/// 设备驱动插件基类 - 提供按端点隔离的连接池、超时控制和结果封装。
+/// 多 DUT 并行时：同一 endpoint 串行，不同 endpoint 可并发，互不重连抢占。
+/// 子类实现连接句柄的创建/发送/关闭即可。
 /// </summary>
 public abstract class DeviceDriverPluginBase : IStepExecutorPlugin, IDeviceDriverPlugin, IDisposable, IAsyncDisposable
 {
-    private bool _isConnected;
-    private string _currentEndpoint = string.Empty;
-    private readonly SemaphoreSlim _executionLock = new(1, 1);
+    private readonly ConcurrentDictionary<string, EndpointSlot> _slots =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _primaryLock = new();
+    private string _primaryEndpoint = string.Empty;
     private bool _disposed;
 
     /// <summary>
-    /// 当前是否已连接
+    /// 是否至少有一个端点已连接。
     /// </summary>
-    protected bool IsConnected => _isConnected;
+    protected bool IsConnected => _slots.Values.Any(s => s.Connection != null);
 
     /// <summary>
-    /// 当前连接的端点
+    /// 最近一次 <see cref="ConnectAsync"/> 的端点（兼容单连接 API）。
     /// </summary>
-    protected string CurrentEndpoint => _currentEndpoint;
+    protected string CurrentEndpoint
+    {
+        get
+        {
+            lock (_primaryLock)
+            {
+                return _primaryEndpoint;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 当前活跃连接数（测试/诊断用）。
+    /// </summary>
+    protected int ActiveConnectionCount => _slots.Count(kv => kv.Value.Connection != null);
 
     public abstract PluginMetadata Metadata { get; }
 
@@ -50,20 +67,12 @@ public abstract class DeviceDriverPluginBase : IStepExecutorPlugin, IDeviceDrive
     /// 判断本插件能否处理指定的步骤类型与通道。
     /// 采用 <b>AND 语义</b>：<paramref name="stepType"/> 与 <paramref name="channel"/>
     /// 必须同时匹配各自支持的集合；任一集合包含通配符 <c>"*"</c> 时该侧视为恒匹配。
-    /// 子类应优先调用 <see cref="DefaultCanHandle"/> 实现统一语义。
     /// </summary>
     public abstract bool CanHandle(string stepType, string channel);
 
     /// <summary>
-    /// 统一的 AND 语义匹配辅助方法。当 <paramref name="supportedTypes"/> 或
-    /// <paramref name="supportedChannels"/> 任一集合包含 <c>"*"</c> 时，对应侧恒匹配；
-    /// 否则要求请求值出现在对应集合中（忽略大小写）。
+    /// 统一的 AND 语义匹配辅助方法。
     /// </summary>
-    /// <param name="stepType">请求的步骤类型。</param>
-    /// <param name="channel">请求的通道。</param>
-    /// <param name="supportedTypes">本插件支持的步骤类型集合（可含 <c>"*"</c>）。</param>
-    /// <param name="supportedChannels">本插件支持的通道集合（可含 <c>"*"</c>）。</param>
-    /// <returns>两侧均匹配返回 true。</returns>
     protected static bool DefaultCanHandle(
         string stepType,
         string channel,
@@ -81,7 +90,7 @@ public abstract class DeviceDriverPluginBase : IStepExecutorPlugin, IDeviceDrive
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(request);
-        await _executionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+
         var startedAt = DateTime.UtcNow;
         try
         {
@@ -92,44 +101,52 @@ public abstract class DeviceDriverPluginBase : IStepExecutorPlugin, IDeviceDrive
             }
 
             var endpoint = ResolveEndpoint(request);
-
-            // 自动连接管理
-            if (!_isConnected || !string.Equals(_currentEndpoint, endpoint, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(endpoint))
             {
-                if (_isConnected)
-                {
-                    await DisconnectAsync(cancellationToken).ConfigureAwait(false);
-                }
+                // 无端点时仍尝试在“空端点”槽上执行（部分 mock/自定义驱动）
+                endpoint = string.Empty;
+            }
 
-                if (!string.IsNullOrWhiteSpace(endpoint))
+            var slot = GetOrCreateSlot(endpoint);
+            await slot.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (slot.Connection == null)
                 {
-                    var connected = await ConnectAsync(endpoint, cancellationToken).ConfigureAwait(false);
-                    if (!connected)
+                    var connection = await CreateConnectionAsync(endpoint, cancellationToken).ConfigureAwait(false);
+                    if (connection == null)
                     {
                         return BuildResult(StepExecutionStatus.Failed, startedAt,
                             errorCode: "PLG_DRV_002",
                             errorMessage: $"连接端点失败: {endpoint}");
                     }
+
+                    slot.Connection = connection;
+                    SetPrimaryEndpoint(endpoint);
                 }
+
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeoutCts.CancelAfter(request.TimeoutMs);
+
+                var output = await SendCommandOnConnectionAsync(slot.Connection, request.Command, timeoutCts.Token)
+                    .ConfigureAwait(false);
+
+                output = PostProcessOutput(output, request);
+
+                var expected = TryGetExpectedExpression(request.Parameters);
+                if (!string.IsNullOrWhiteSpace(expected) &&
+                    !ExpectedResultMatcher.Match(expected, output, out var reason))
+                {
+                    return BuildResult(StepExecutionStatus.Failed, startedAt, output,
+                        "PLG_DRV_003", reason);
+                }
+
+                return BuildResult(StepExecutionStatus.Passed, startedAt, rawOutput: output);
             }
-
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(request.TimeoutMs);
-
-            var output = await SendCommandAsync(request.Command, timeoutCts.Token).ConfigureAwait(false);
-
-            // 执行后处理（子类可覆盖）
-            output = PostProcessOutput(output, request);
-
-            var expected = TryGetExpectedExpression(request.Parameters);
-            if (!string.IsNullOrWhiteSpace(expected) &&
-                !ExpectedResultMatcher.Match(expected, output, out var reason))
+            finally
             {
-                return BuildResult(StepExecutionStatus.Failed, startedAt, output,
-                    "PLG_DRV_003", reason);
+                slot.Gate.Release();
             }
-
-            return BuildResult(StepExecutionStatus.Passed, startedAt, rawOutput: output);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -147,62 +164,133 @@ public abstract class DeviceDriverPluginBase : IStepExecutorPlugin, IDeviceDrive
                 errorCode: PluginErrorCodes.ExecuteException,
                 errorMessage: ex.Message);
         }
-        finally
-        {
-            _executionLock.Release();
-        }
     }
 
+    /// <summary>
+    /// 连接指定端点（按端点隔离；不会断开其他端点）。
+    /// </summary>
     public async Task<bool> ConnectAsync(string endpoint, CancellationToken ct = default)
     {
-        if (_isConnected && string.Equals(_currentEndpoint, endpoint, StringComparison.OrdinalIgnoreCase))
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        endpoint ??= string.Empty;
+
+        var slot = GetOrCreateSlot(endpoint);
+        await slot.Gate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
+            if (slot.Connection != null)
+            {
+                SetPrimaryEndpoint(endpoint);
+                return true;
+            }
+
+            var connection = await CreateConnectionAsync(endpoint, ct).ConfigureAwait(false);
+            if (connection == null)
+            {
+                return false;
+            }
+
+            slot.Connection = connection;
+            SetPrimaryEndpoint(endpoint);
             return true;
         }
-
-        if (_isConnected)
+        finally
         {
-            await DisconnectCoreAsync(ct).ConfigureAwait(false);
-            _isConnected = false;
-            _currentEndpoint = string.Empty;
+            slot.Gate.Release();
         }
-
-        var result = await ConnectCoreAsync(endpoint, ct).ConfigureAwait(false);
-        if (result)
-        {
-            _isConnected = true;
-            _currentEndpoint = endpoint;
-        }
-
-        return result;
     }
 
+    /// <summary>
+    /// 在主端点上发送命令（兼容 <see cref="IDeviceDriverPlugin"/>）。
+    /// </summary>
     public async Task<string> SendCommandAsync(string command, CancellationToken ct = default)
     {
-        return await SendCommandCoreAsync(command, ct).ConfigureAwait(false);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var endpoint = CurrentEndpoint;
+        var slot = GetOrCreateSlot(endpoint);
+        await slot.Gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (slot.Connection == null)
+            {
+                throw new InvalidOperationException("尚未连接任何端点。");
+            }
+
+            return await SendCommandOnConnectionAsync(slot.Connection, command, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            slot.Gate.Release();
+        }
     }
 
+    /// <summary>
+    /// 断开主端点；若主端点为空则断开全部。
+    /// </summary>
     public async Task DisconnectAsync(CancellationToken ct = default)
     {
-        if (_isConnected)
+        var primary = CurrentEndpoint;
+        if (!string.IsNullOrEmpty(primary) && _slots.ContainsKey(primary))
         {
-            await DisconnectCoreAsync(ct).ConfigureAwait(false);
-            _isConnected = false;
-            _currentEndpoint = string.Empty;
+            await DisconnectEndpointAsync(primary, ct).ConfigureAwait(false);
+            return;
+        }
+
+        await DisconnectAllAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 断开指定端点连接。
+    /// </summary>
+    protected async Task DisconnectEndpointAsync(string endpoint, CancellationToken ct = default)
+    {
+        if (!_slots.TryGetValue(endpoint, out var slot))
+        {
+            return;
+        }
+
+        await slot.Gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (slot.Connection != null)
+            {
+                try
+                {
+                    await CloseConnectionAsync(slot.Connection, ct).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // 断开异常忽略
+                }
+
+                slot.Connection = null;
+            }
+        }
+        finally
+        {
+            slot.Gate.Release();
+        }
+
+        lock (_primaryLock)
+        {
+            if (string.Equals(_primaryEndpoint, endpoint, StringComparison.OrdinalIgnoreCase))
+            {
+                _primaryEndpoint = string.Empty;
+            }
+        }
+    }
+
+    private async Task DisconnectAllAsync(CancellationToken ct)
+    {
+        foreach (var endpoint in _slots.Keys.ToList())
+        {
+            await DisconnectEndpointAsync(endpoint, ct).ConfigureAwait(false);
         }
     }
 
     public virtual async Task ShutdownAsync(CancellationToken cancellationToken = default)
     {
-        await _executionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await DisconnectAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _executionLock.Release();
-        }
+        await DisconnectAllAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -255,7 +343,6 @@ public abstract class DeviceDriverPluginBase : IStepExecutorPlugin, IDeviceDrive
 
     /// <summary>
     /// 判断实际输出是否满足期望表达式，统一路由到 <see cref="ExpectedResultMatcher"/>。
-    /// 支持 <c>contains:</c>/<c>equals:</c>/<c>regex:</c>/<c>notcontains:</c> 及裸文本。
     /// </summary>
     protected static bool IsExpectedResult(string actual, string expectedExpression)
     {
@@ -271,19 +358,20 @@ public abstract class DeviceDriverPluginBase : IStepExecutorPlugin, IDeviceDrive
     }
 
     /// <summary>
-    /// 核心连接实现 - 子类必须实现
+    /// 创建并打开指定端点的连接句柄。失败返回 null。
+    /// 连接对象由基类按端点缓存；同一端点并发访问由槽位锁串行化。
     /// </summary>
-    protected abstract Task<bool> ConnectCoreAsync(string endpoint, CancellationToken ct);
+    protected abstract Task<object?> CreateConnectionAsync(string endpoint, CancellationToken ct);
 
     /// <summary>
-    /// 核心命令发送实现 - 子类必须实现
+    /// 在已打开的连接句柄上发送命令。
     /// </summary>
-    protected abstract Task<string> SendCommandCoreAsync(string command, CancellationToken ct);
+    protected abstract Task<string> SendCommandOnConnectionAsync(object connection, string command, CancellationToken ct);
 
     /// <summary>
-    /// 核心断开连接实现 - 子类必须实现
+    /// 关闭并释放连接句柄。
     /// </summary>
-    protected abstract Task DisconnectCoreAsync(CancellationToken ct);
+    protected abstract Task CloseConnectionAsync(object connection, CancellationToken ct);
 
     protected StepExecutionResult BuildResult(
         StepExecutionStatus status,
@@ -306,6 +394,19 @@ public abstract class DeviceDriverPluginBase : IStepExecutorPlugin, IDeviceDrive
         };
     }
 
+    private EndpointSlot GetOrCreateSlot(string endpoint)
+    {
+        return _slots.GetOrAdd(endpoint ?? string.Empty, _ => new EndpointSlot());
+    }
+
+    private void SetPrimaryEndpoint(string endpoint)
+    {
+        lock (_primaryLock)
+        {
+            _primaryEndpoint = endpoint ?? string.Empty;
+        }
+    }
+
     public void Dispose()
     {
         Dispose(true);
@@ -313,7 +414,7 @@ public abstract class DeviceDriverPluginBase : IStepExecutorPlugin, IDeviceDrive
     }
 
     /// <summary>
-    /// 异步释放：优雅地等待断开连接完成。优先使用此方法以避免 sync-over-async。
+    /// 异步释放：优雅地等待断开连接完成。
     /// </summary>
     public async ValueTask DisposeAsync()
     {
@@ -328,22 +429,17 @@ public abstract class DeviceDriverPluginBase : IStepExecutorPlugin, IDeviceDrive
             return;
         }
 
-        if (_isConnected)
+        try
         {
-            try
-            {
-                await DisconnectCoreAsync(CancellationToken.None).ConfigureAwait(false);
-            }
-            catch
-            {
-                // 断开异常忽略，确保释放流程完成
-            }
-
-            _isConnected = false;
+            await DisconnectAllAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            // best effort
         }
 
         DisposeManagedResources();
-        _executionLock.Dispose();
+        DisposeSlots();
         _disposed = true;
     }
 
@@ -354,31 +450,40 @@ public abstract class DeviceDriverPluginBase : IStepExecutorPlugin, IDeviceDrive
             return;
         }
 
-        if (_isConnected)
+        try
         {
-            // 不直接 await DisconnectCoreAsync（sync-over-async 死锁风险）；
-            // 在同步 Dispose 中以 2 秒硬超时执行断开，超时即放弃，由终结器/异步路径兜底。
-            try
-            {
-                Task.Run(() => DisconnectCoreAsync(CancellationToken.None)).Wait(TimeSpan.FromMilliseconds(2000));
-            }
-            catch
-            {
-                // 超时或异常忽略
-            }
-
-            _isConnected = false;
+            Task.Run(() => DisconnectAllAsync(CancellationToken.None)).Wait(TimeSpan.FromMilliseconds(2000));
+        }
+        catch
+        {
+            // 超时或异常忽略
         }
 
         DisposeManagedResources();
-        _executionLock.Dispose();
+        DisposeSlots();
         _disposed = true;
     }
 
+    private void DisposeSlots()
+    {
+        foreach (var slot in _slots.Values)
+        {
+            slot.Gate.Dispose();
+        }
+
+        _slots.Clear();
+    }
+
     /// <summary>
-    /// 释放托管资源（子类可覆盖以释放端口/连接等）。在同步与异步释放路径中均被调用。
+    /// 释放托管资源（子类可覆盖）。在同步与异步释放路径中均被调用。
     /// </summary>
     protected virtual void DisposeManagedResources()
     {
+    }
+
+    private sealed class EndpointSlot
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+        public object? Connection { get; set; }
     }
 }

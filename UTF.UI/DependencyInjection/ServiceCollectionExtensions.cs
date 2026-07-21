@@ -44,9 +44,13 @@ public static class ServiceCollectionExtensions
         });
 
         // UI 管理器和服务
+        // Residual debt (Phase B): ConfigurationManager (file IO + UnifiedConfiguration models)
+        // still lives in UTF.UI. Mapping to engine models is in UTF.Core.Mapping.TestProjectMapper.
+        // Full downshift of UnifiedConfiguration to UTF.Configuration is deferred to avoid XAML/namespace churn.
         services.AddSingleton<UTF.UI.Services.ConfigurationManager>();
         services.AddSingleton<IConfigurationService>(sp => sp.GetRequiredService<UTF.UI.Services.ConfigurationManager>());
 
+        // DUTMonitorManager projects onto ConfigDrivenTestOrchestrator (single session entry).
         services.AddSingleton<UTF.UI.Services.DUTMonitorManager>();
         services.AddSingleton<IDUTMonitorService>(sp => sp.GetRequiredService<UTF.UI.Services.DUTMonitorManager>());
 

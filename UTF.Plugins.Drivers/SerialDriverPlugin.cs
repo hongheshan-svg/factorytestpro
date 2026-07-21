@@ -8,11 +8,11 @@ using UTF.Plugin.Abstractions;
 namespace UTF.Plugins.Drivers;
 
 /// <summary>
-/// 串口通信驱动插件 - 通过 RS232/RS485 串口与 DUT 通信
+/// 串口通信驱动插件 - 通过 RS232/RS485 串口与 DUT 通信。
+/// 每个串口端点独立连接，支持多 DUT 并行。
 /// </summary>
 public sealed class SerialDriverPlugin : DeviceDriverPluginBase
 {
-    private SerialPort? _serialPort;
     private int _baudRate = 115200;
     private int _dataBits = 8;
     private StopBits _stopBits = StopBits.One;
@@ -66,7 +66,6 @@ public sealed class SerialDriverPlugin : DeviceDriverPluginBase
 
     public override bool CanHandle(string stepType, string channel)
     {
-        // AND 语义：stepType 与 channel 必须同时匹配（各集合均可含 "*" 通配符）。
         var supportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "serial", "uart", "rs232", "rs485"
@@ -93,42 +92,40 @@ public sealed class SerialDriverPlugin : DeviceDriverPluginBase
         return string.Empty;
     }
 
-    protected override Task<bool> ConnectCoreAsync(string endpoint, CancellationToken ct)
+    protected override Task<object?> CreateConnectionAsync(string endpoint, CancellationToken ct)
     {
         try
         {
-            _serialPort = new SerialPort(endpoint, _baudRate, _parity, _dataBits, _stopBits)
+            var serialPort = new SerialPort(endpoint, _baudRate, _parity, _dataBits, _stopBits)
             {
                 ReadTimeout = _readTimeoutMs,
                 WriteTimeout = _readTimeoutMs,
                 Encoding = Encoding.UTF8
             };
-            _serialPort.Open();
-            _serialPort.DiscardInBuffer();
-            _serialPort.DiscardOutBuffer();
-            return Task.FromResult(true);
+            serialPort.Open();
+            serialPort.DiscardInBuffer();
+            serialPort.DiscardOutBuffer();
+            return Task.FromResult<object?>(serialPort);
         }
         catch
         {
-            _serialPort?.Dispose();
-            _serialPort = null;
-            return Task.FromResult(false);
+            return Task.FromResult<object?>(null);
         }
     }
 
-    protected override async Task<string> SendCommandCoreAsync(string command, CancellationToken ct)
+    protected override async Task<string> SendCommandOnConnectionAsync(object connection, string command, CancellationToken ct)
     {
-        if (_serialPort == null || !_serialPort.IsOpen)
+        var serialPort = (SerialPort)connection;
+        if (!serialPort.IsOpen)
         {
             throw new InvalidOperationException("串口未打开");
         }
 
-        var baseStream = _serialPort.BaseStream
+        var baseStream = serialPort.BaseStream
             ?? throw new InvalidOperationException("串口基础流不可用");
-        _serialPort.DiscardInBuffer();
-        _serialPort.Write(command + _lineEnding);
+        serialPort.DiscardInBuffer();
+        serialPort.Write(command + _lineEnding);
 
-        // 用链接取消令牌施加读取超时上限，避免轮询 BytesToRead 的忙等。
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         linkedCts.CancelAfter(_readTimeoutMs);
 
@@ -147,17 +144,15 @@ public sealed class SerialDriverPlugin : DeviceDriverPluginBase
                 }
                 catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && !ct.IsCancellationRequested)
                 {
-                    // 读取超时：返回已收到的内容（若有）。
                     break;
                 }
 
                 if (bytesRead > 0)
                 {
-                    response.Append(_serialPort.Encoding.GetString(buffer, 0, bytesRead));
+                    response.Append(serialPort.Encoding.GetString(buffer, 0, bytesRead));
                 }
                 else
                 {
-                    // 对端关闭或无更多数据
                     break;
                 }
             }
@@ -170,30 +165,18 @@ public sealed class SerialDriverPlugin : DeviceDriverPluginBase
         return response.ToString().Trim();
     }
 
-    protected override Task DisconnectCoreAsync(CancellationToken ct)
+    protected override Task CloseConnectionAsync(object connection, CancellationToken ct)
     {
-        if (_serialPort != null)
+        if (connection is SerialPort serialPort)
         {
-            if (_serialPort.IsOpen)
+            if (serialPort.IsOpen)
             {
-                _serialPort.Close();
+                serialPort.Close();
             }
 
-            _serialPort.Dispose();
-            _serialPort = null;
+            serialPort.Dispose();
         }
 
         return Task.CompletedTask;
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            _serialPort?.Dispose();
-            _serialPort = null;
-        }
-
-        base.Dispose(disposing);
     }
 }

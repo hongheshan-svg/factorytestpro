@@ -8,13 +8,12 @@ using UTF.Plugin.Abstractions;
 namespace UTF.Plugins.Drivers;
 
 /// <summary>
-/// ADB 通信驱动插件 - 通过 Android Debug Bridge 与 Android 设备通信
-/// 支持 adb shell、adb push/pull、adb install 等命令
+/// ADB 通信驱动插件 - 通过 Android Debug Bridge 与 Android 设备通信。
+/// 每个设备序列号作为独立端点，支持多设备并行。
 /// </summary>
 public sealed class AdbDriverPlugin : DeviceDriverPluginBase
 {
     private string _adbPath = "adb";
-    private string _currentDeviceSerial = string.Empty;
 
     public override PluginMetadata Metadata { get; } = new()
     {
@@ -37,7 +36,6 @@ public sealed class AdbDriverPlugin : DeviceDriverPluginBase
 
     public override bool CanHandle(string stepType, string channel)
     {
-        // AND 语义：stepType 与 channel 必须同时匹配。
         var supportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "adb", "android", "shell"
@@ -51,7 +49,6 @@ public sealed class AdbDriverPlugin : DeviceDriverPluginBase
 
     protected override string ResolveEndpoint(StepExecutionRequest request)
     {
-        // ADB 设备通过 serial number 标识（USB 或 IP:Port）
         if (request.Parameters.TryGetValue("DeviceSerial", out var serial) && serial != null)
         {
             return serial.ToString()!;
@@ -65,63 +62,43 @@ public sealed class AdbDriverPlugin : DeviceDriverPluginBase
         return base.ResolveEndpoint(request);
     }
 
-    protected override async Task<bool> ConnectCoreAsync(string endpoint, CancellationToken ct)
+    protected override async Task<object?> CreateConnectionAsync(string endpoint, CancellationToken ct)
     {
-        _currentDeviceSerial = endpoint;
-
-        // 判断是否为网络端点（host:port 或 IP），需要先执行 adb connect；
-        // 否则视为 USB 设备序列号。用 Uri/正则判断取代宽松的 Contains(':')/Contains('.')。
+        // 网络端点需要 adb connect；USB 序列号只需在线校验。
         if (IsNetworkEndpoint(endpoint))
         {
             var result = await RunAdbCommandAsync(new[] { "connect", endpoint }, ct).ConfigureAwait(false);
-            return result.Contains("connected", StringComparison.OrdinalIgnoreCase);
-        }
-
-        // USB 连接的设备，验证设备是否在线
-        var devices = await RunAdbCommandAsync(new[] { "devices" }, ct).ConfigureAwait(false);
-        return devices.Contains(endpoint, StringComparison.OrdinalIgnoreCase);
-    }
-
-    protected override async Task<string> SendCommandCoreAsync(string command, CancellationToken ct)
-    {
-        var trimmedCommand = command.Trim();
-
-        // 判断是否需要自动包装为 adb shell 命令
-        if (trimmedCommand.StartsWith("adb ", StringComparison.OrdinalIgnoreCase))
-        {
-            // 用户已经提供了完整的 adb 命令（去掉 adb 前缀）
-            var adbArgs = trimmedCommand.Substring(4).Trim();
-            if (!string.IsNullOrWhiteSpace(_currentDeviceSerial))
+            if (!result.Contains("connected", StringComparison.OrdinalIgnoreCase))
             {
-                return await RunAdbCommandAsync(new[] { "-s", _currentDeviceSerial, adbArgs }, ct).ConfigureAwait(false);
+                return null;
             }
-
-            return await RunAdbCommandAsync(new[] { adbArgs }, ct).ConfigureAwait(false);
         }
-
-        // 默认包装为 adb shell 命令
-        if (!string.IsNullOrWhiteSpace(_currentDeviceSerial))
+        else if (!string.IsNullOrWhiteSpace(endpoint))
         {
-            return await RunAdbCommandAsync(new[] { "-s", _currentDeviceSerial, "shell", trimmedCommand }, ct).ConfigureAwait(false);
+            var devices = await RunAdbCommandAsync(new[] { "devices" }, ct).ConfigureAwait(false);
+            if (!devices.Contains(endpoint, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
         }
 
-        return await RunAdbCommandAsync(new[] { "shell", trimmedCommand }, ct).ConfigureAwait(false);
+        return new AdbConnection(endpoint, _adbPath);
     }
 
-    protected override async Task DisconnectCoreAsync(CancellationToken ct)
+    protected override Task<string> SendCommandOnConnectionAsync(object connection, string command, CancellationToken ct)
     {
-        if (IsNetworkEndpoint(_currentDeviceSerial))
-        {
-            await RunAdbCommandAsync(new[] { "disconnect", _currentDeviceSerial }, ct).ConfigureAwait(false);
-        }
-
-        _currentDeviceSerial = string.Empty;
+        var state = (AdbConnection)connection;
+        return state.SendCommandAsync(command, ct);
     }
 
-    /// <summary>
-    /// 判断端点是否为网络形式（host:port 或点分 IPv4/IPv6/主机名），
-    /// 用于区分需要 adb connect 的网络设备与 USB 序列号。
-    /// </summary>
+    protected override async Task CloseConnectionAsync(object connection, CancellationToken ct)
+    {
+        if (connection is AdbConnection state)
+        {
+            await state.DisconnectAsync(ct).ConfigureAwait(false);
+        }
+    }
+
     private static bool IsNetworkEndpoint(string endpoint)
     {
         if (string.IsNullOrWhiteSpace(endpoint))
@@ -129,7 +106,6 @@ public sealed class AdbDriverPlugin : DeviceDriverPluginBase
             return false;
         }
 
-        // host:port 形式（host 不含冒号，port 为数字）
         var hostPortMatch = System.Text.RegularExpressions.Regex.Match(
             endpoint, @"^[^:/]+:\d+$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
         if (hostPortMatch.Success)
@@ -137,7 +113,6 @@ public sealed class AdbDriverPlugin : DeviceDriverPluginBase
             return true;
         }
 
-        // 纯点分 IPv4 / 含点的主机名（USB 序列号通常不含点与冒号）
         if (endpoint.Contains('.') && Uri.TryCreate($"tcp://{endpoint}", UriKind.Absolute, out _))
         {
             return true;
@@ -148,8 +123,6 @@ public sealed class AdbDriverPlugin : DeviceDriverPluginBase
 
     private async Task<string> RunAdbCommandAsync(IReadOnlyList<string> args, CancellationToken ct)
     {
-        // 使用 ArgumentList 逐参数添加而非拼接字符串赋值给 Arguments，
-        // 以避免因设备序列号/命令文本中混入特殊字符而导致的参数注入。
         var startInfo = new ProcessStartInfo
         {
             FileName = _adbPath,
@@ -207,6 +180,106 @@ public sealed class AdbDriverPlugin : DeviceDriverPluginBase
         catch
         {
             // Cancellation must still propagate even if the OS refuses termination.
+        }
+    }
+
+    private sealed class AdbConnection
+    {
+        private readonly string _deviceSerial;
+        private readonly string _adbPath;
+
+        public AdbConnection(string deviceSerial, string adbPath)
+        {
+            _deviceSerial = deviceSerial ?? string.Empty;
+            _adbPath = adbPath;
+        }
+
+        public async Task<string> SendCommandAsync(string command, CancellationToken ct)
+        {
+            var trimmedCommand = command.Trim();
+
+            if (trimmedCommand.StartsWith("adb ", StringComparison.OrdinalIgnoreCase))
+            {
+                var adbArgs = trimmedCommand.Substring(4).Trim();
+                if (!string.IsNullOrWhiteSpace(_deviceSerial))
+                {
+                    return await RunAsync(new[] { "-s", _deviceSerial, adbArgs }, ct).ConfigureAwait(false);
+                }
+
+                return await RunAsync(new[] { adbArgs }, ct).ConfigureAwait(false);
+            }
+
+            if (!string.IsNullOrWhiteSpace(_deviceSerial))
+            {
+                return await RunAsync(new[] { "-s", _deviceSerial, "shell", trimmedCommand }, ct).ConfigureAwait(false);
+            }
+
+            return await RunAsync(new[] { "shell", trimmedCommand }, ct).ConfigureAwait(false);
+        }
+
+        public async Task DisconnectAsync(CancellationToken ct)
+        {
+            if (IsNetworkEndpoint(_deviceSerial))
+            {
+                await RunAsync(new[] { "disconnect", _deviceSerial }, ct).ConfigureAwait(false);
+            }
+        }
+
+        private async Task<string> RunAsync(IReadOnlyList<string> args, CancellationToken ct)
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = _adbPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            foreach (var arg in args)
+            {
+                startInfo.ArgumentList.Add(arg);
+            }
+
+            using var process = new Process { StartInfo = startInfo };
+            if (!process.Start())
+            {
+                throw new InvalidOperationException($"启动 ADB 进程失败: {_adbPath}");
+            }
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+            var stderrTask = process.StandardError.ReadToEndAsync(ct);
+
+            try
+            {
+                await process.WaitForExitAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                }
+                catch
+                {
+                    // ignore
+                }
+
+                throw;
+            }
+
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+
+            if (process.ExitCode != 0 && !string.IsNullOrWhiteSpace(stderr))
+            {
+                throw new InvalidOperationException($"ADB 命令失败 (exit={process.ExitCode}): {stderr.Trim()}");
+            }
+
+            return $"{stdout}{Environment.NewLine}{stderr}".Trim();
         }
     }
 }

@@ -42,8 +42,9 @@ public sealed class MainWindowViewModelTests : IDisposable
         _logger = logger;
         _configAdapter = configAdapter;
         _configManager = new ConfigurationManager(cache, configAdapter);
+        var orchestrator = new ConfigDrivenTestOrchestrator(_configManager, engine, logger);
         _dutMonitorManager = new DUTMonitorManager(
-            _configManager, configAdapter, pluginHost, engine, logger);
+            _configManager, configAdapter, pluginHost, orchestrator, logger);
         _permissionManager = Substitute.For<IPermissionManager>();
         _dialogService = Substitute.For<IDialogService>();
         _windowFactory = Substitute.For<IWindowFactory>();

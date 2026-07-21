@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using UTF.Core;
+using UTF.Core.Mapping;
 using UTF.Plugin.Abstractions;
 using UTF.Plugin.Host;
 using UTF.UI.Models;
@@ -10,17 +11,15 @@ using UTF.UI.Models;
 namespace UTF.UI.Services;
 
 /// <summary>
-/// Current production test-run entry for the desktop app (UTF.UI).
 /// Projects configuration-driven test sessions onto the WPF DUT monitor surface.
-/// Execution and result validation remain in <see cref="ConfigDrivenTestEngine"/>;
-/// session orchestration via <see cref="ConfigDrivenTestOrchestrator"/> is Phase B.
+/// Execution is owned by <see cref="ConfigDrivenTestOrchestrator"/>; this type only maps events to UI.
 /// </summary>
 public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
 {
     private readonly ConfigurationManager _configManager;
     private readonly IConfigurationAdapter _configAdapter;
     private readonly StepExecutorPluginHost _pluginHost;
-    private readonly ConfigDrivenTestEngine _testEngine;
+    private readonly ConfigDrivenTestOrchestrator _orchestrator;
     private readonly UTF.Logging.ILogger _logger;
     private readonly SemaphoreSlim _pluginInitSemaphore = new(1, 1);
     private readonly Dictionary<string, DUTMonitorItem> _itemsById = new(StringComparer.OrdinalIgnoreCase);
@@ -29,21 +28,24 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
     private DataGrid? _dataGrid;
     private CancellationTokenSource? _runCts;
     private Task? _activeRunTask;
+    private string? _activeSessionId;
     private bool _pluginsInitialized;
     private bool _disposed;
+    private bool _eventsHooked;
 
     public DUTMonitorManager(
         ConfigurationManager configManager,
         IConfigurationAdapter configAdapter,
         StepExecutorPluginHost pluginHost,
-        ConfigDrivenTestEngine testEngine,
+        ConfigDrivenTestOrchestrator orchestrator,
         UTF.Logging.ILogger logger)
     {
-        _configManager = configManager;
-        _configAdapter = configAdapter;
-        _pluginHost = pluginHost;
-        _testEngine = testEngine;
-        _logger = logger;
+        _configManager = configManager ?? throw new ArgumentNullException(nameof(configManager));
+        _configAdapter = configAdapter ?? throw new ArgumentNullException(nameof(configAdapter));
+        _pluginHost = pluginHost ?? throw new ArgumentNullException(nameof(pluginHost));
+        _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        HookOrchestratorEvents();
     }
 
     public event Action? StatisticsUpdateRequested;
@@ -57,8 +59,6 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
 
     /// <summary>
     /// 初始化 DUT 监控：加载插件、加载 DUT 配置、生成集合。
-    /// 不再接受 DataGrid 参数 - 动态列生成请通过 <see cref="AttachToDataGrid(DataGrid)"/> 显式调用，
-    /// 或直接通过 XAML 绑定 <see cref="DUTItems"/>。
     /// </summary>
     public async Task InitializeAsync()
     {
@@ -71,21 +71,17 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
 
     /// <summary>
     /// 将 DUT 监控列表绑定到指定 <see cref="DataGrid"/>，并刷新动态列。
-    /// 兼容旧代码路径：旧 <c>InitializeAsync(DataGrid)</c> 已被拆分为本方法 + <see cref="InitializeAsync"/>。
     /// </summary>
-    /// <param name="dataGrid">要绑定 DUTItems 的 DataGrid。</param>
     public void AttachToDataGrid(DataGrid dataGrid)
     {
         ArgumentNullException.ThrowIfNull(dataGrid);
         _dataGrid = dataGrid;
         dataGrid.ItemsSource = DUTItems;
-        // 列已绑定 ItemsSource；GenerateDynamicColumnsAsync 会按 _dataGrid.Columns 修改动态列。
         _ = GenerateDynamicColumnsAsync();
     }
 
     /// <summary>
     /// 兼容旧 API：将初始化与 DataGrid 绑定合并执行。
-    /// 推荐改为先 <see cref="InitializeAsync"/> 再 <see cref="AttachToDataGrid"/>。
     /// </summary>
     public async Task InitializeAsync(DataGrid dataGrid)
     {
@@ -104,7 +100,7 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
             throw new InvalidOperationException($"测试配置无效: {string.Join("; ", errors)}");
         }
 
-        var project = BuildProject(configuration);
+        var project = MapProject(configuration);
         if (!project.Enabled)
         {
             throw new InvalidOperationException("测试项目已禁用。");
@@ -117,7 +113,24 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
         }
 
         await EnsurePluginsInitializedAsync().ConfigureAwait(true);
+
         var maxConcurrency = Math.Clamp(_configAdapter.GetMaxConcurrent(configuration), 1, 256);
+        var dutConfig = TestProjectMapper.BuildDutConfig(
+            productName: configuration.DUTConfiguration.ProductInfo?.Name,
+            productModel: configuration.DUTConfiguration.ProductInfo?.Model,
+            expectedSoftwareVersion: configuration.DUTConfiguration.ProductInfo?.ExpectedSoftwareVersion,
+            defaultMaxConcurrent: maxConcurrency,
+            testTimeout: configuration.DUTConfiguration.GlobalSettings?.TestTimeout ?? 300,
+            retryCount: configuration.DUTConfiguration.GlobalSettings?.RetryCount ?? 3,
+            serialPorts: _configAdapter.GetSerialPorts(configuration),
+            networkHosts: _configAdapter.GetNetworkHosts(configuration));
+
+        var perDutContexts = new Dictionary<string, Dictionary<string, object>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in candidates)
+        {
+            perDutContexts[item.DutId] = BuildDutContext(item, configuration);
+        }
+
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task runTask;
         lock (_runGate)
@@ -130,7 +143,12 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
 
             _runCts?.Dispose();
             _runCts = cts;
-            runTask = RunAllAsync(candidates, project, configuration, maxConcurrency, cts.Token);
+            runTask = RunSessionViaOrchestratorAsync(
+                candidates,
+                project,
+                dutConfig,
+                perDutContexts,
+                cts.Token);
             _activeRunTask = runTask;
         }
 
@@ -139,15 +157,30 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
 
     public async Task StopAllTestsAsync()
     {
+        string? sessionId;
         Task? active;
         CancellationTokenSource? cts;
         lock (_runGate)
         {
+            sessionId = _activeSessionId;
             active = _activeRunTask;
             cts = _runCts;
         }
 
         cts?.Cancel();
+
+        if (!string.IsNullOrEmpty(sessionId))
+        {
+            try
+            {
+                await _orchestrator.StopSessionAsync(sessionId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"停止编排会话失败: {ex.Message}");
+            }
+        }
+
         if (active != null)
         {
             try
@@ -175,9 +208,16 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
 
     public void StopAllTests()
     {
+        string? sessionId;
         lock (_runGate)
         {
             _runCts?.Cancel();
+            sessionId = _activeSessionId;
+        }
+
+        if (!string.IsNullOrEmpty(sessionId))
+        {
+            _ = _orchestrator.StopSessionAsync(sessionId);
         }
     }
 
@@ -219,77 +259,61 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
         }
     }
 
-    private async Task RunAllAsync(
+    private async Task RunSessionViaOrchestratorAsync(
         IReadOnlyList<DUTMonitorItem> candidates,
         ConfigTestProject project,
-        UnifiedConfiguration configuration,
-        int maxConcurrency,
+        DUTConfigInfo dutConfig,
+        IReadOnlyDictionary<string, Dictionary<string, object>> perDutContexts,
         CancellationToken cancellationToken)
     {
-        using var concurrency = new SemaphoreSlim(maxConcurrency, maxConcurrency);
-        var tasks = candidates.Select(async item =>
+        var dutIds = candidates.Select(c => c.DutId).ToList();
+        var session = await _orchestrator.CreateSessionAsync(
+            project,
+            dutIds,
+            operatorName: Environment.UserName,
+            sessionContext: null,
+            dutConfig: dutConfig,
+            perDutContexts: perDutContexts,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if (session == null)
         {
-            await concurrency.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
-            {
-                await RunDutAsync(item, project, configuration, cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                concurrency.Release();
-            }
-        });
+            throw new InvalidOperationException("无法创建测试会话（项目校验失败或 DUT 列表无效）。");
+        }
 
-        await Task.WhenAll(tasks).ConfigureAwait(false);
-    }
-
-    private async Task RunDutAsync(
-        DUTMonitorItem item,
-        ConfigTestProject project,
-        UnifiedConfiguration configuration,
-        CancellationToken cancellationToken)
-    {
-        await OnUiAsync(() =>
+        lock (_runGate)
         {
-            item.OverallStatus = DUTMonitorStatus.Running;
-            item.CurrentStepText = "正在执行测试";
-            item.StartTime = DateTime.Now;
-            item.EndTime = null;
-            AddDutLogCore(item, "开始执行测试", UTF.Logging.LogLevel.Info);
-        }).ConfigureAwait(false);
+            _activeSessionId = session.SessionId;
+        }
 
-        var context = BuildDutContext(item, configuration);
+        var started = await _orchestrator.StartSessionAsync(session.SessionId, cancellationToken).ConfigureAwait(false);
+        if (!started)
+        {
+            // Cleanup must not be cancelled by the run token (session already failed to start).
+            await _orchestrator.CleanupSessionAsync(session.SessionId, CancellationToken.None).ConfigureAwait(false);
+            lock (_runGate)
+            {
+                _activeSessionId = null;
+            }
+
+            throw new InvalidOperationException("无法启动测试会话。");
+        }
+
         try
         {
-            var report = await _testEngine.ExecuteTestProjectAsync(
-                project,
-                item.DutId,
-                context,
-                cancellationToken).ConfigureAwait(false);
-
-            await OnUiAsync(() => ApplyReport(item, report)).ConfigureAwait(false);
+            await _orchestrator.WaitForSessionAsync(session.SessionId).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        finally
         {
-            await OnUiAsync(() =>
+            // Always clean up even if the run token is cancelled.
+            await _orchestrator.CleanupSessionAsync(session.SessionId, CancellationToken.None).ConfigureAwait(false);
+            lock (_runGate)
             {
-                item.OverallStatus = DUTMonitorStatus.Idle;
-                item.CurrentStepText = "测试已停止";
-                item.EndTime = DateTime.Now;
-                AddDutLogCore(item, "测试已取消", UTF.Logging.LogLevel.Warning);
-            }).ConfigureAwait(false);
-            throw;
-        }
-        catch (Exception ex)
-        {
-            await OnUiAsync(() =>
-            {
-                item.OverallStatus = DUTMonitorStatus.Error;
-                item.CurrentStepText = $"测试异常: {ex.Message}";
-                item.EndTime = DateTime.Now;
-                AddDutLogCore(item, $"测试异常: {ex.Message}", UTF.Logging.LogLevel.Error);
-            }).ConfigureAwait(false);
-            _logger.Error($"DUT {item.DutId} 测试失败", ex);
+                if (string.Equals(_activeSessionId, session.SessionId, StringComparison.Ordinal))
+                {
+                    _activeSessionId = null;
+                }
+            }
         }
     }
 
@@ -332,6 +356,129 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
         }
     }
 
+    private void HookOrchestratorEvents()
+    {
+        if (_eventsHooked)
+        {
+            return;
+        }
+
+        _orchestrator.DutStarted += OnDutStarted;
+        _orchestrator.DutCompleted += OnDutCompleted;
+        _orchestrator.StepCompleted += OnStepCompleted;
+        _orchestrator.ErrorOccurred += OnErrorOccurred;
+        _eventsHooked = true;
+    }
+
+    private void UnhookOrchestratorEvents()
+    {
+        if (!_eventsHooked)
+        {
+            return;
+        }
+
+        _orchestrator.DutStarted -= OnDutStarted;
+        _orchestrator.DutCompleted -= OnDutCompleted;
+        _orchestrator.StepCompleted -= OnStepCompleted;
+        _orchestrator.ErrorOccurred -= OnErrorOccurred;
+        _eventsHooked = false;
+    }
+
+    private void OnDutStarted(object? sender, ConfigTestEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.DutId) || !_itemsById.TryGetValue(e.DutId, out var item))
+        {
+            return;
+        }
+
+        _ = OnUiAsync(() =>
+        {
+            item.OverallStatus = DUTMonitorStatus.Running;
+            item.CurrentStepText = "正在执行测试";
+            item.StartTime = DateTime.Now;
+            item.EndTime = null;
+            AddDutLogCore(item, "开始执行测试", UTF.Logging.LogLevel.Info);
+            StatisticsUpdateRequested?.Invoke();
+        });
+    }
+
+    private void OnStepCompleted(object? sender, ConfigTestEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.DutId) ||
+            e.Data is not ConfigDrivenStepResult result ||
+            !_itemsById.TryGetValue(e.DutId, out var item))
+        {
+            return;
+        }
+
+        _ = OnUiAsync(() =>
+        {
+            var step = item.TestSteps.FirstOrDefault(s =>
+                string.Equals(s.StepId, result.StepId, StringComparison.OrdinalIgnoreCase));
+            if (step != null)
+            {
+                step.Status = result.Skipped
+                    ? DUTMonitorStepStatus.Skipped
+                    : result.Passed ? DUTMonitorStepStatus.Passed : DUTMonitorStepStatus.Failed;
+                step.StartTime = result.StartTime.ToLocalTime();
+                step.EndTime = result.EndTime.ToLocalTime();
+                step.ErrorMessage = result.ErrorMessage;
+            }
+
+            AddDutLogCore(
+                item,
+                $"步骤 {result.StepName}: {(result.Skipped ? "SKIP" : result.Passed ? "PASS" : "FAIL")}" +
+                (string.IsNullOrWhiteSpace(result.ErrorMessage) ? string.Empty : $" - {result.ErrorMessage}"),
+                result.Passed || result.Skipped ? UTF.Logging.LogLevel.Info : UTF.Logging.LogLevel.Error);
+            item.CurrentStepText = $"步骤 {result.StepName}: {(result.Skipped ? "SKIP" : result.Passed ? "PASS" : "FAIL")}";
+            StatisticsUpdateRequested?.Invoke();
+        });
+    }
+
+    private void OnDutCompleted(object? sender, ConfigTestEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.DutId) || !_itemsById.TryGetValue(e.DutId, out var item))
+        {
+            return;
+        }
+
+        if (e.Data is ConfigDrivenTestReport report)
+        {
+            _ = OnUiAsync(() => ApplyReport(item, report));
+            return;
+        }
+
+        _ = OnUiAsync(() =>
+        {
+            if (item.OverallStatus == DUTMonitorStatus.Running)
+            {
+                item.OverallStatus = DUTMonitorStatus.Failed;
+                item.CurrentStepText = "测试完成（无报告）";
+                item.EndTime = DateTime.Now;
+            }
+
+            StatisticsUpdateRequested?.Invoke();
+        });
+    }
+
+    private void OnErrorOccurred(object? sender, ConfigTestEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.DutId) || !_itemsById.TryGetValue(e.DutId, out var item))
+        {
+            return;
+        }
+
+        var message = e.Data?.ToString() ?? "未知错误";
+        _ = OnUiAsync(() =>
+        {
+            item.OverallStatus = DUTMonitorStatus.Error;
+            item.CurrentStepText = $"测试异常: {message}";
+            item.EndTime = DateTime.Now;
+            AddDutLogCore(item, $"测试异常: {message}", UTF.Logging.LogLevel.Error);
+            StatisticsUpdateRequested?.Invoke();
+        });
+    }
+
     private void ApplyReport(DUTMonitorItem item, ConfigDrivenTestReport report)
     {
         var byId = item.TestSteps.ToDictionary(step => step.StepId, StringComparer.OrdinalIgnoreCase);
@@ -348,11 +495,6 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
             step.StartTime = result.StartTime.ToLocalTime();
             step.EndTime = result.EndTime.ToLocalTime();
             step.ErrorMessage = result.ErrorMessage;
-            AddDutLogCore(
-                item,
-                $"步骤 {result.StepName}: {(result.Skipped ? "SKIP" : result.Passed ? "PASS" : "FAIL")}" +
-                (string.IsNullOrWhiteSpace(result.ErrorMessage) ? string.Empty : $" - {result.ErrorMessage}"),
-                result.Passed ? UTF.Logging.LogLevel.Info : UTF.Logging.LogLevel.Error);
         }
 
         foreach (var pending in item.TestSteps.Where(step => step.Status == DUTMonitorStepStatus.Pending))
@@ -377,52 +519,52 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
             .FindIndex(port => string.Equals(port, item.SerialNumber, StringComparison.OrdinalIgnoreCase)) ?? 0);
         var hosts = configuration.DUTConfiguration.CommunicationEndpoints?.NetworkHosts;
         var host = hosts is { Count: > 0 } ? hosts[index % hosts.Count] : string.Empty;
-        return new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["SerialPort"] = item.SerialNumber,
-            ["Host"] = host,
-            ["DutName"] = item.DutName,
-            ["DutType"] = item.DeviceType
-        };
+        return TestProjectMapper.BuildDutContext(
+            item.DutId,
+            item.DutName,
+            item.DeviceType,
+            item.SerialNumber,
+            host);
     }
 
-    private static ConfigTestProject BuildProject(UnifiedConfiguration configuration)
+    private static ConfigTestProject MapProject(UnifiedConfiguration configuration)
     {
         var source = configuration.TestProjectConfiguration?.TestProject
             ?? throw new InvalidOperationException("缺少测试项目配置。");
         var defaultRetryCount = configuration.DUTConfiguration.GlobalSettings?.RetryCount ?? 0;
-        return new ConfigTestProject
+        var steps = source.Steps.Select(step => new ConfigTestStep
         {
-            Id = source.Id,
-            Name = source.Name,
-            Description = source.Description,
-            Enabled = source.Enabled,
-            Steps = source.Steps.Select(step => new ConfigTestStep
-            {
-                Id = step.Id,
-                Name = step.Name,
-                Description = step.Description,
-                Order = step.Order,
-                Enabled = step.Enabled,
-                Type = step.Type,
-                TargetDeviceId = step.TargetDeviceId ?? step.Target,
-                Command = step.Command,
-                Expected = step.Expected,
-                Timeout = step.Timeout,
-                Delay = step.Delay,
-                RetryCount = step.RetryCount ?? defaultRetryCount,
-                Channel = step.Channel,
-                StoreResultAs = step.StoreResultAs,
-                ConditionExpression = step.ConditionExpression,
-                ContinueOnFailure = step.ContinueOnFailure,
-                ValidationRules = step.ValidationRules == null
-                    ? null
-                    : new Dictionary<string, object>(step.ValidationRules),
-                Parameters = step.Parameters == null
-                    ? null
-                    : new Dictionary<string, object>(step.Parameters)
-            }).ToList()
-        };
+            Id = step.Id,
+            Name = step.Name,
+            Description = step.Description,
+            Order = step.Order,
+            Enabled = step.Enabled,
+            Type = step.Type,
+            TargetDeviceId = step.TargetDeviceId ?? step.Target,
+            Command = step.Command,
+            Expected = step.Expected,
+            Timeout = step.Timeout,
+            Delay = step.Delay,
+            RetryCount = step.RetryCount,
+            Channel = step.Channel,
+            StoreResultAs = step.StoreResultAs,
+            ConditionExpression = step.ConditionExpression,
+            ContinueOnFailure = step.ContinueOnFailure,
+            ValidationRules = step.ValidationRules == null
+                ? null
+                : new Dictionary<string, object>(step.ValidationRules),
+            Parameters = step.Parameters == null
+                ? null
+                : new Dictionary<string, object>(step.Parameters)
+        });
+
+        return TestProjectMapper.BuildProject(
+            source.Id,
+            source.Name,
+            source.Description,
+            source.Enabled,
+            steps,
+            defaultRetryCount);
     }
 
     private async Task LoadDutConfigurationAsync(int? requestedCount = null)
@@ -637,6 +779,7 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
         }
 
         StopAllTests();
+        UnhookOrchestratorEvents();
         _pluginInitSemaphore.Dispose();
         _disposed = true;
     }
