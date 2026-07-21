@@ -153,6 +153,27 @@ public sealed class WindowFactory : IWindowFactory
         return null;
     }
 
+    /// <inheritdoc />
+    public bool? ShowTemplatePackPickerDialog()
+    {
+        // 与系统配置或测试计划管理任一权限一致即可打开。
+        if (!_permissionManager.HasPermission(Permission.SystemConfig) &&
+            !_permissionManager.HasPermission(Permission.TestPlanManagement))
+        {
+            _dialogService.ShowWarning("无权限：选择工艺包/模板");
+            return null;
+        }
+
+        var win = _serviceProvider.GetRequiredService<TemplatePackPickerWindow>();
+        TrySetOwner(win);
+        var result = win.ShowDialog();
+        if (result == true)
+        {
+            RaiseApplied("TemplatePackPicker");
+        }
+        return result;
+    }
+
     private bool Require(Permission permission, string action)
     {
         if (_permissionManager.HasPermission(permission))

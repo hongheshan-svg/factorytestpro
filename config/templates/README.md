@@ -14,6 +14,16 @@
 
 ## 使用方法
 
+### UI 一键应用（推荐）
+
+桌面端：**配置 → 选择工艺包/模板…**（权限：系统配置或测试计划管理）。
+
+- 列表扫描本目录 `*.json`（运行时来自 `BaseDirectory/config/templates`，构建时由 `UTF.UI.csproj` 从仓库 `config/` 复制）。
+- 预览产品名称与步骤数后点 **应用选中模板**；确认后会替换当前 `unified-config.json`，并在同目录生成 `unified-config.backup.<时间戳>.json`。
+- 应用成功后主界面刷新 DUT 监控与产品型号。
+
+### 手动复制
+
 1. 将模板复制到 `config/unified-config.json`
 2. 修改 `DUTConfiguration.ProductInfo` 为实际产品信息
 3. 修改 `CommunicationEndpoints` 为实际串口/网络地址

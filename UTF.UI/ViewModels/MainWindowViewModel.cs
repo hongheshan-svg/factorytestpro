@@ -208,13 +208,22 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(OpenConfigurationCenterCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenPluginManagerCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenTemplatePackPickerCommand))]
+    [NotifyPropertyChangedFor(nameof(CanOpenTemplatePackPicker))]
     private bool _canConfigureSystem;
 
     /// <summary>当前用户是否有测试计划管理权限（用于快速创建、测试计划编辑器）。</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(OpenQuickTestWizardCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenTestPlanEditorCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenTemplatePackPickerCommand))]
+    [NotifyPropertyChangedFor(nameof(CanOpenTemplatePackPicker))]
     private bool _canManageTestPlans;
+
+    /// <summary>
+    /// 是否可打开工艺包/模板选择器（系统配置或测试计划管理任一权限）。
+    /// </summary>
+    public bool CanOpenTemplatePackPicker => CanConfigureSystem || CanManageTestPlans;
 
     /// <summary>当前用户是否有测试计划创建权限（用于快速创建向导）。</summary>
     [ObservableProperty]
@@ -745,6 +754,11 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanManageUsers))]
     private void OpenUserManager()
         => _windowFactory.ShowUserManagerDialog();
+
+    /// <summary>打开工艺包/模板选择器。</summary>
+    [RelayCommand(CanExecute = nameof(CanOpenTemplatePackPicker))]
+    private void OpenTemplatePackPicker()
+        => _windowFactory.ShowTemplatePackPickerDialog();
 
     /// <summary>退出应用程序（带确认）。</summary>
     [RelayCommand]

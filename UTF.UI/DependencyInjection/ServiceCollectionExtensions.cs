@@ -85,10 +85,17 @@ public static class ServiceCollectionExtensions
         // 测试配置构建器（快速创建向导使用）
         services.AddSingleton<ITestConfigurationBuilder, TestConfigurationBuilder>();
 
+        // 工艺包/模板目录服务（扫描 config/templates；不注入 path 覆盖参数）
+        services.AddSingleton<ITemplatePackService>(sp =>
+            new TemplatePackService(
+                sp.GetRequiredService<ConfigurationManager>(),
+                sp.GetService<UTF.Logging.ILogger>()));
+
         // 视图模型（瞬态 - 每次打开窗口获得新实例）
         services.AddTransient<UTF.UI.ViewModels.MainWindowViewModel>();
         services.AddTransient<UTF.UI.ViewModels.ConfigurationCenterViewModel>();
         services.AddTransient<UTF.UI.ViewModels.QuickTestWizardViewModel>();
+        services.AddTransient<UTF.UI.ViewModels.TemplatePackPickerViewModel>();
 
         return services;
     }

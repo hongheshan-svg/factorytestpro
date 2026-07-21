@@ -1,0 +1,201 @@
+<Window x:Class="UTF.UI.TemplatePackPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="选择工艺包 / 模板"
+        Height="560" Width="820"
+        WindowStartupLocation="CenterOwner"
+        Background="#F0F2F5"
+        ResizeMode="CanResizeWithGrip"
+        MinHeight="420" MinWidth="640">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#007ACC"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="18,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.5"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.85"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#E4E6EB"/>
+            <Setter Property="Foreground" Value="#333"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="18,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.85"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="CardBorder" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="6" ShadowDepth="2" Opacity="0.08" Color="Gray"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="#888"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+        </Style>
+
+        <Style x:Key="FieldValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#222"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="选择工艺包 / 产品模板" FontSize="18" FontWeight="SemiBold" Foreground="#1565C0"/>
+            <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="#666" Margin="0,4,0,0" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Body: list + preview -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.2*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource CardBorder}" Padding="0">
+                <ListBox ItemsSource="{Binding Packs}"
+                         SelectedItem="{Binding SelectedPack, Mode=TwoWay}"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="12,10"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}"
+                                                BorderBrush="#EEEEEE" BorderThickness="0,0,0,1">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#E3F2FD"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#F5F9FC"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="SemiBold" Foreground="#1A237E"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding SummaryLine}" FontSize="11" Foreground="#607D8B" Margin="0,2,0,0"/>
+                                <TextBlock Text="{Binding Description}" FontSize="12" Foreground="#555" Margin="0,4,0,0"
+                                           TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="40"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource CardBorder}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <TextBlock Text="预览" FontSize="14" FontWeight="SemiBold" Foreground="#1565C0" Margin="0,0,0,12"/>
+
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="模板文件"/>
+                        <TextBlock Style="{StaticResource FieldValue}" Text="{Binding PreviewFileName}"/>
+
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="行业 / 标签"/>
+                        <TextBlock Style="{StaticResource FieldValue}" Text="{Binding PreviewIndustry}"/>
+
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="产品名称"/>
+                        <TextBlock Style="{StaticResource FieldValue}" Text="{Binding PreviewProductName}"/>
+
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="产品型号"/>
+                        <TextBlock Style="{StaticResource FieldValue}" Text="{Binding PreviewProductModel}"/>
+
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="测试步骤数"/>
+                        <TextBlock Style="{StaticResource FieldValue}" Text="{Binding PreviewStepCountText}"/>
+
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="描述"/>
+                        <TextBlock Style="{StaticResource FieldValue}" Text="{Binding PreviewDescription}"/>
+
+                        <Border Background="#FFF8E1" CornerRadius="4" Padding="10" Margin="0,4,0,0"
+                                Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock Text="应用后将覆盖当前 unified-config.json，并刷新 DUT 监控与产品型号。"
+                                       FontSize="11" Foreground="#F57F17" TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- Footer -->
+        <DockPanel Grid.Row="2" Margin="0,14,0,0" LastChildFill="False">
+            <Button DockPanel.Dock="Right"
+                    Content="应用选中模板"
+                    Style="{StaticResource PrimaryButton}"
+                    Command="{Binding ApplySelectedPackCommand}"
+                    Margin="8,0,0,0"/>
+            <Button DockPanel.Dock="Right"
+                    Content="取消"
+                    Style="{StaticResource SecondaryButton}"
+                    Click="CancelButton_Click"
+                    IsCancel="True"/>
+        </DockPanel>
+    </Grid>
+</Window>

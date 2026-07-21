@@ -120,6 +120,41 @@ public sealed class MainWindowViewModelTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
+    public void CanOpenTemplatePackPicker_TrueWhenSystemConfigOrTestPlanManagement()
+    {
+        _permissionManager.HasPermission(Permission.SystemConfig).Returns(true);
+        _permissionManager.HasPermission(Permission.TestPlanManagement).Returns(false);
+        _viewModel.RefreshPermissions();
+        Assert.True(_viewModel.CanOpenTemplatePackPicker);
+        Assert.True(_viewModel.OpenTemplatePackPickerCommand.CanExecute(null));
+
+        _permissionManager.HasPermission(Permission.SystemConfig).Returns(false);
+        _permissionManager.HasPermission(Permission.TestPlanManagement).Returns(true);
+        _viewModel.RefreshPermissions();
+        Assert.True(_viewModel.CanOpenTemplatePackPicker);
+        Assert.True(_viewModel.OpenTemplatePackPickerCommand.CanExecute(null));
+
+        _permissionManager.HasPermission(Permission.SystemConfig).Returns(false);
+        _permissionManager.HasPermission(Permission.TestPlanManagement).Returns(false);
+        _viewModel.RefreshPermissions();
+        Assert.False(_viewModel.CanOpenTemplatePackPicker);
+        Assert.False(_viewModel.OpenTemplatePackPickerCommand.CanExecute(null));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void OpenTemplatePackPickerCommand_InvokesWindowFactory()
+    {
+        _permissionManager.HasPermission(Permission.SystemConfig).Returns(true);
+        _viewModel.RefreshPermissions();
+
+        _viewModel.OpenTemplatePackPickerCommand.Execute(null);
+
+        _windowFactory.Received(1).ShowTemplatePackPickerDialog();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void UpdateStatistics_MixedStatusDutItems_AggregatesCorrectly()
     {
         _dutMonitorManager.DUTItems.Add(new DUTMonitorItem

@@ -111,6 +111,7 @@ public partial class App : Application
         services.AddTransient<TestPlanEditorWindow>();
         services.AddTransient<ConfigurationCenterWindow>();
         services.AddTransient<QuickTestWizardWindow>();
+        services.AddTransient<TemplatePackPickerWindow>();
     }
 
     protected override void OnExit(ExitEventArgs e)

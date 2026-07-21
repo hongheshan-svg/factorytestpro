@@ -13,6 +13,7 @@
 - Configuration-driven execution is the default flow (single engine: `ConfigDrivenTestEngine` / `IStepExecutionService`; no dual-engine / `ITestEngine`):
   - **Models + IO**: `UTF.Configuration` (`UnifiedConfiguration`, `UnifiedConfigurationManager`, `IUnifiedConfigurationAdapter`)
   - **UI**: `config/unified-config.json` -> `UTF.UI.Services.ConfigurationManager` (thin wrapper) -> `DUTMonitorManager` -> `ConfigDrivenTestOrchestrator` -> `ConfigDrivenTestEngine`
+  - **Template packs**: `config/templates/*.json` catalog via `ITemplatePackService` / UI **配置 → 选择工艺包/模板…** (`TemplatePackPickerWindow`)
   - **Headless**: same models via `UTF.Core.Configuration.FileUnifiedConfigurationService` -> Orchestrator
 - CLI build runs `scripts/pack-plugins.ps1` into `UTF.CLI/bin/.../plugins` (no need to point at UI output unless overriding `--plugins`).
 - Result validation MUST use `UTF.Plugin.Abstractions.ExpectedResultMatcher` (re-exported as `UTF.Core.Validation.ExpectedResultMatcher`). Engines and plugins must not re-parse `contains:`/`equals:`/`regex:`/`notcontains:` inline.

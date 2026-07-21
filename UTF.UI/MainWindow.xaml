@@ -77,11 +77,14 @@
                 <MenuItem Header="退出(_X)" Command="{Binding ExitAppCommand}"/>
             </MenuItem>
             <MenuItem x:Name="ConfigurationMenuItem" Header="配置(_C)"
-                      IsEnabled="{Binding CanConfigureSystem}"
                       Visibility="{Binding ShowEngineeringMenus, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <MenuItem x:Name="ConfigCenterMenuItem" Header="配置管理中心(_M)" Command="{Binding OpenConfigurationCenterCommand}"/>
+                <MenuItem x:Name="ConfigCenterMenuItem" Header="配置管理中心(_M)" Command="{Binding OpenConfigurationCenterCommand}"
+                          IsEnabled="{Binding CanConfigureSystem}"/>
+                <MenuItem x:Name="TemplatePackPickerMenuItem" Header="选择工艺包/模板…(_T)" Command="{Binding OpenTemplatePackPickerCommand}"
+                          IsEnabled="{Binding CanOpenTemplatePackPicker}"/>
                 <Separator/>
-                <MenuItem x:Name="ImportConfigMenuItem" Header="导入配置(_I)" Command="{Binding ImportConfigCommand}"/>
+                <MenuItem x:Name="ImportConfigMenuItem" Header="导入配置(_I)" Command="{Binding ImportConfigCommand}"
+                          IsEnabled="{Binding CanImportConfig}"/>
             </MenuItem>
             <MenuItem Header="工具(_T)">
                 <MenuItem x:Name="QuickCreateMenuItem" Header="🚀 快速创建测试(_Q)" Command="{Binding OpenQuickTestWizardCommand}" FontWeight="SemiBold"

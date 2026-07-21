@@ -38,6 +38,10 @@ public interface IWindowFactory
     /// <summary>展示用户管理对话框。</summary>
     /// <returns>对话框关闭结果；权限不足则 <c>null</c>。</returns>
     bool? ShowUserManagerDialog();
+
+    /// <summary>展示工艺包/模板选择对话框。</summary>
+    /// <returns>用户应用模板则返回 <c>true</c>，取消 <c>false</c>，权限不足等提前退出 <c>null</c>。</returns>
+    bool? ShowTemplatePackPickerDialog();
 }
 
 /// <summary>
