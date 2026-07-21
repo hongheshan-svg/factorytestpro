@@ -10,8 +10,10 @@ using UTF.UI.Models;
 namespace UTF.UI.Services;
 
 /// <summary>
+/// Current production test-run entry for the desktop app (UTF.UI).
 /// Projects configuration-driven test sessions onto the WPF DUT monitor surface.
-/// Execution and validation remain in <see cref="ConfigDrivenTestEngine"/>.
+/// Execution and result validation remain in <see cref="ConfigDrivenTestEngine"/>;
+/// session orchestration via <see cref="ConfigDrivenTestOrchestrator"/> is Phase B.
 /// </summary>
 public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
 {

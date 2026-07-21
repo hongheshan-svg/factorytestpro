@@ -10,9 +10,17 @@ using UTF.Logging;
 namespace UTF.Core;
 
 /// <summary>
-/// 配置驱动的测试编排器 - 整合配置加载、测试执行和插件系统。
-/// 会话状态变更通过 _orchestrationLock 串行化；后台会话任务保留 TaskCompletionSource 供等待。
+/// Preferred session orchestrator for headless/shared session semantics.
+/// Integrates config load, concurrent session lifecycle, and step execution via
+/// <see cref="ConfigDrivenTestEngine"/>. Session state mutations are serialized on
+/// <c>_orchestrationLock</c>; background session tasks expose a
+/// <see cref="TaskCompletionSource{TResult}"/> for awaiters.
 /// </summary>
+/// <remarks>
+/// Registered in DI today. Desktop UI still enters tests through
+/// <c>UTF.UI.Services.DUTMonitorManager</c>; full UI migration onto this orchestrator
+/// is Phase B.
+/// </remarks>
 public sealed class ConfigDrivenTestOrchestrator : IDisposable
 {
     private readonly ILogger _logger;

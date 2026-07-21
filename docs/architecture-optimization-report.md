@@ -191,6 +191,33 @@ var result = await orchestrator.ExecuteStepWithRetryAsync(step, dutId);
 
 ---
 
+## Architecture truth (2026-07 audit)
+
+This section records what the code **actually does today**, correcting dual-engine / dual-path narratives that lingered in older docs.
+
+### Dual path (still true after legacy cleanup)
+
+| Path | Role | Status |
+|------|------|--------|
+| **Desktop production** | `ConfigurationManager` → **`DUTMonitorManager`** → **`ConfigDrivenTestEngine`** | **Current UI test-run entry** |
+| **Core session API** | **`ConfigDrivenTestOrchestrator`** → `ConfigDrivenTestEngine` | Registered in DI; preferred for headless/shared sessions; **UI migration is Phase B** |
+
+- There is **one** step engine: `ConfigDrivenTestEngine` (also `IStepExecutionService`). `OptimizedTestEngine` / `ITestEngine` are **deleted** — do not reintroduce or document them as live types.
+- Result validation single source of truth: `UTF.Plugin.Abstractions.ExpectedResultMatcher` (thin re-export: `UTF.Core.Validation.ExpectedResultMatcher`). Prefixes: `contains:` / `equals:` / `regex:` (2s timeout) / `notcontains:` / bare text = contains.
+
+### Phase A (止血) fixes applied
+
+1. **`ConfigDrivenTestEngine.ValidateExpectedPattern`** delegates to `ExpectedResultMatcher.Match(..., out reason)` — no more bare `Regex.IsMatch` without timeout on the Expected prefix path.
+2. **`--skip-login` / `/skip-login`** is **DEBUG-only** (`#if DEBUG`); Release logs and still shows `LoginWindow`. `IPermissionManager.SignInAsDevelopmentUser` prefers existing SuperAdmin/Admin, else in-memory SuperAdmin `dev`.
+3. Docs (`AGENTS.md`, `CLAUDE.md`, this section) state the real entry path and kill the dual-engine narrative; XML docs on `DUTMonitorManager` and `ConfigDrivenTestOrchestrator` annotate production vs preferred roles.
+
+### Not Phase A (deferred)
+
+- Phase B: migrate desktop UI from `DUTMonitorManager` onto `ConfigDrivenTestOrchestrator`.
+- Phase C: headless CLI host project.
+
+---
+
 ## 2026-07 全面架构优化（本批次）
 
 本轮针对全代码库（约 32K 行）的 4 份并行深度审计结果，分 6 个阶段实施，重点关注安全、稳定性、死代码清理与架构收敛。

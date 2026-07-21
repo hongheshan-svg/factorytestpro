@@ -9,13 +9,17 @@
 
 ## Architecture
 - Keep business and execution logic out of the UI layer. Prefer placing reusable logic in `UTF.Core` or `UTF.Business`; `UTF.UI` should orchestrate windows, binding, and service wiring.
-- Configuration-driven execution is the default flow: `config/unified-config.json` -> `UTF.UI.Services.ConfigurationManager` -> `ConfigDrivenTestOrchestrator` -> `ConfigDrivenTestEngine`.
+- **Production UI path today**: `config/unified-config.json` -> `UTF.UI.Services.ConfigurationManager` -> `UTF.UI.Services.DUTMonitorManager` -> `ConfigDrivenTestEngine`.
+- **Core session API**: `ConfigDrivenTestOrchestrator` is registered in DI and is the preferred headless/shared-session orchestrator; the desktop UI is **not** fully on it yet (Phase B migration).
+- Do **not** invent a dual-engine story: `OptimizedTestEngine` / `ITestEngine` were deleted. Step execution is `ConfigDrivenTestEngine` (also `IStepExecutionService`).
+- Result validation MUST use `UTF.Plugin.Abstractions.ExpectedResultMatcher` (re-exported as `UTF.Core.Validation.ExpectedResultMatcher`). Engines and plugins must not re-parse `contains:`/`equals:`/`regex:`/`notcontains:` inline.
 - Plugin-based step execution goes through `UTF.Plugin.Host.StepExecutorPluginHost` and `IPluginService`. Plugin manifests are discovered from `plugins/<pluginId>/<version>/plugin.manifest.json` after build packaging.
 - Dependency injection patterns are defined in `UTF.Core/DependencyInjection/ServiceCollectionExtensions.cs`, `UTF.Configuration/ServiceCollectionExtensions.cs`, and `UTF.UI/DependencyInjection/ServiceCollectionExtensions.cs`.
 - Good reference files:
   - `UTF.UI/App.xaml.cs` for startup, DI, and crash handling
+  - `UTF.UI/Services/DUTMonitorManager.cs` for the current production desktop test-run entry
   - `UTF.Core/ConfigDrivenTestEngine.cs` for step execution behavior
-  - `UTF.Core/ConfigDrivenTestOrchestrator.cs` for session orchestration and concurrency
+  - `UTF.Core/ConfigDrivenTestOrchestrator.cs` for preferred session orchestration and concurrency
   - `UTF.Plugin.Host/StepExecutorPluginHost.cs` for plugin loading and dispatch (SHA-256 mandatory, path-traversal guarded)
   - `UTF.Plugin.Abstractions/ExpectedResultMatcher.cs` for the single source of truth on `contains:`/`equals:`/`regex:`/`notcontains:` result validation
   - `tests/UTF.Core.Tests/ConfigDrivenTestEngineTests.cs` for xUnit test style

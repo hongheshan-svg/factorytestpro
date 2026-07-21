@@ -76,6 +76,36 @@ public sealed class PermissionManager : IPermissionManager, IDisposable
         }
     }
 
+    public void SignInAsDevelopmentUser()
+    {
+        ThrowIfDisposed();
+
+        var existingAdmin = _users.Values
+            .Where(user => user.IsActive && user.Role is UserRole.SuperAdmin or UserRole.Admin)
+            .OrderBy(user => user.Role)
+            .ThenBy(user => user.Username, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+
+        if (existingAdmin != null)
+        {
+            existingAdmin.LastLoginAt = DateTime.UtcNow;
+            _currentUser = ConvertToUserInfo(existingAdmin);
+            return;
+        }
+
+        _currentUser = new UserInfo
+        {
+            Username = "dev",
+            DisplayName = "Development (skip login)",
+            Email = "dev@localhost",
+            Role = UserRole.SuperAdmin,
+            Permissions = new List<Permission>(),
+            CreatedAt = DateTime.UtcNow,
+            LastLoginAt = DateTime.UtcNow,
+            IsActive = true
+        };
+    }
+
     public async Task<LoginResult> LoginAsync(string username, string password)
     {
         ThrowIfDisposed();

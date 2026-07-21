@@ -51,6 +51,14 @@ UTF.Plugins.Example      → 示例插件（CMD 执行器）
 
 **结果验证前缀：** `contains:` / `equals:` / `regex:` / `notcontains:`
 
+结果验证 **必须** 调用 `UTF.Plugin.Abstractions.ExpectedResultMatcher.Match`（`UTF.Core.Validation.ExpectedResultMatcher` 转发），禁止在引擎/插件内重新解析前缀。
+
+### 真实入口路径（2026-07 审计）
+
+- **生产桌面 UI 路径**：`config/unified-config.json` → `ConfigurationManager` → `DUTMonitorManager` → `ConfigDrivenTestEngine`
+- **Core 会话 API**：`ConfigDrivenTestOrchestrator`（DI 已注册；桌面 UI 尚未完全迁入，属 Phase B）
+- 已删除：`OptimizedTestEngine` / `ITestEngine`。勿再按双引擎叙事编写或注册这些类型。
+
 添加新测试步骤只需编辑配置，无需改动代码。
 
 ## 插件系统
@@ -112,10 +120,10 @@ protected override void OnStartup(StartupEventArgs e)
 public class MainWindow : Window
 {
     private readonly ILogger _logger;
-    private readonly ITestEngine _testEngine;
+    private readonly ConfigDrivenTestEngine _testEngine;
     private readonly ICache _cache;
 
-    public MainWindow(ILogger logger, ITestEngine testEngine, ICache cache)
+    public MainWindow(ILogger logger, ConfigDrivenTestEngine testEngine, ICache cache)
     {
         _logger = logger;
         _testEngine = testEngine;
@@ -125,15 +133,16 @@ public class MainWindow : Window
 }
 ```
 
+> `ITestEngine` / `OptimizedTestEngine` 已删除；步骤执行统一为 `ConfigDrivenTestEngine`（并实现 `IStepExecutionService`）。
+
 ### 预注册服务
 
 - **UTF.Core.DependencyInjection.ServiceCollectionExtensions.AddUtfCore()**
   - `ICache` (Singleton) - 内存缓存
   - `ILogger` (Singleton) - 日志服务
-  - `ConfigDrivenTestEngine` (Transient) - 配置驱动测试引擎（同时实现 `IStepExecutionService`）
-  - `IStepExecutionService` (Transient) - 步骤执行服务，桥接到 `ConfigDrivenTestEngine`
+  - `ConfigDrivenTestEngine` (Singleton) - 配置驱动测试引擎（同时实现 `IStepExecutionService`）
   - `ConfigDrivenTestValidator` (Transient) - 配置驱动测试验证器
-  - `ConfigDrivenTestOrchestrator` (Singleton) - 会话编排器（持有共享会话状态）
+  - `ConfigDrivenTestOrchestrator` (Singleton) - 首选会话编排器（持有共享会话状态；UI 迁入为 Phase B）
   - `IRetryPolicy` -> `ExponentialBackoffRetryPolicy` (Singleton)
   - `IPluginContainer` -> `PluginContainer` (Singleton)
   - `IEventBus` -> `EventBus` (Singleton)
@@ -149,7 +158,7 @@ public class MainWindow : Window
   - `IPluginService` -> `PluginServiceAdapter` (Singleton)
   - `ConfigurationManager` (Singleton)
   - `IConfigurationService` -> `ConfigurationManager` (Singleton)
-  - `DUTMonitorManager` (Singleton) - 同时实现 `IDUTMonitorService`
+  - `DUTMonitorManager` (Singleton) - **当前生产桌面测试入口**，同时实现 `IDUTMonitorService`
   - `IDialogService` -> `DialogService` (Singleton)
   - `IWindowFactory` -> `WindowFactory` (Singleton)
   - `IPermissionManager` -> `PermissionManager` (Singleton)

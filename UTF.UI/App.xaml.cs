@@ -39,11 +39,35 @@ public partial class App : Application
                 ValidateScopes = true
             });
 
-            var loginWindow = _serviceProvider.GetRequiredService<LoginWindow>();
-            if (loginWindow.ShowDialog() != true)
+            // --skip-login / /skip-login: DEBUG-only development sign-in (no LoginWindow).
+            // Release builds ignore the flag and always require interactive login.
+            var useDevLogin = false;
+#if DEBUG
+            useDevLogin = e.Args.Any(arg =>
+                string.Equals(arg, "--skip-login", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(arg, "/skip-login", StringComparison.OrdinalIgnoreCase));
+#else
+            if (e.Args.Any(arg =>
+                string.Equals(arg, "--skip-login", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(arg, "/skip-login", StringComparison.OrdinalIgnoreCase)))
             {
-                Shutdown();
-                return;
+                WriteCrashLog("--skip-login / /skip-login is ignored in Release builds; login is required.");
+            }
+#endif
+
+            if (useDevLogin)
+            {
+                var permissionManager = _serviceProvider.GetRequiredService<UTF.UI.Services.IPermissionManager>();
+                permissionManager.SignInAsDevelopmentUser();
+            }
+            else
+            {
+                var loginWindow = _serviceProvider.GetRequiredService<LoginWindow>();
+                if (loginWindow.ShowDialog() != true)
+                {
+                    Shutdown();
+                    return;
+                }
             }
 
             // 启动时验证配置

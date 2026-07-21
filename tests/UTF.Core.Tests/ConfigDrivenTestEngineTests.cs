@@ -133,6 +133,52 @@ public class ConfigDrivenTestEngineTests : IDisposable
 
     #endregion
 
+    #region ExecuteStepAsync - Expected 前缀经 ExpectedResultMatcher
+
+    [Theory][Trait("Category","Unit")]
+    [InlineData("contains:PASS", "line PASS ok", true)]
+    [InlineData("contains:PASS", "line FAIL ok", false)]
+    [InlineData("equals:OK", "OK", true)]
+    [InlineData("equals:OK", " OK ", true)]
+    [InlineData("equals:OK", "NOK", false)]
+    [InlineData("notcontains:ERR", "all good", true)]
+    [InlineData("notcontains:ERR", "got ERR code", false)]
+    [InlineData("regex:^OK\\d+$", "OK42", true)]
+    [InlineData("regex:^OK\\d+$", "FAIL42", false)]
+    [InlineData("PASS", "status PASS", true)]
+    [InlineData("PASS", "status FAIL", false)]
+    public async Task ExecuteStepAsync_ExpectedPattern_DelegatesToExpectedResultMatcher(
+        string expected,
+        string mockOutput,
+        bool shouldPass)
+    {
+        var step = new ConfigTestStep
+        {
+            Id = "step-expected",
+            Name = "Expected Pattern Step",
+            Order = 1,
+            Type = "unknown",
+            Channel = "mystery",
+            Command = "ignored",
+            Expected = expected,
+            Parameters = new Dictionary<string, object>
+            {
+                ["MockOutput"] = mockOutput
+            }
+        };
+
+        var result = await _engine.ExecuteStepAsync(step, "DUT-001");
+
+        Assert.Equal(shouldPass, result.Passed);
+        Assert.Equal(mockOutput, result.RawOutput);
+        if (!shouldPass)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(result.ErrorMessage));
+        }
+    }
+
+    #endregion
+
     #region ExecuteStepAsync - 超时
 
     [Fact][Trait("Category","Unit")]

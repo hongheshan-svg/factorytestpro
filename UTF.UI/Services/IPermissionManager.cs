@@ -19,6 +19,12 @@ public interface IPermissionManager
     /// </summary>
     Task<LoginResult> LoginAsync(string username, string password);
 
+    /// <summary>
+    /// Development-only: establish a SuperAdmin session without credentials.
+    /// Prefer an existing SuperAdmin/Admin account when present; otherwise use an in-memory dev user.
+    /// </summary>
+    void SignInAsDevelopmentUser();
+
     /// <summary>Returns whether at least one account exists.</summary>
     Task<bool> HasUsersAsync();
 

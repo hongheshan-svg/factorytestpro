@@ -402,69 +402,14 @@ public sealed class ConfigDrivenTestEngine : IStepExecutionService, IDisposable
         }
     }
 
-    private StepValidationResult ValidateExpectedPattern(string actualOutput, string expectedPattern)
+    /// <summary>
+    /// Expected 前缀匹配的唯一入口：委托给
+    /// <see cref="UTF.Plugin.Abstractions.ExpectedResultMatcher"/>（含 regex 2s 超时）。
+    /// 禁止在此重新解析 contains:/equals:/regex:/notcontains:。
+    /// </summary>
+    private static StepValidationResult ValidateExpectedPattern(string actualOutput, string expectedPattern)
     {
-        if (expectedPattern.StartsWith("contains:", StringComparison.OrdinalIgnoreCase))
-        {
-            var expectedValue = expectedPattern.Substring("contains:".Length);
-            if (actualOutput.Contains(expectedValue, StringComparison.OrdinalIgnoreCase))
-            {
-                return new StepValidationResult { IsValid = true };
-            }
-
-            return new StepValidationResult
-            {
-                IsValid = false,
-                ErrorMessage = $"输出不包含期望值: {expectedValue}"
-            };
-        }
-
-        if (expectedPattern.StartsWith("notcontains:", StringComparison.OrdinalIgnoreCase))
-        {
-            var expectedValue = expectedPattern.Substring("notcontains:".Length);
-            if (!actualOutput.Contains(expectedValue, StringComparison.OrdinalIgnoreCase))
-            {
-                return new StepValidationResult { IsValid = true };
-            }
-
-            return new StepValidationResult
-            {
-                IsValid = false,
-                ErrorMessage = $"输出包含不允许内容: {expectedValue}"
-            };
-        }
-
-        if (expectedPattern.StartsWith("equals:", StringComparison.OrdinalIgnoreCase))
-        {
-            var expectedValue = expectedPattern.Substring("equals:".Length);
-            if (actualOutput.Trim().Equals(expectedValue.Trim(), StringComparison.OrdinalIgnoreCase))
-            {
-                return new StepValidationResult { IsValid = true };
-            }
-
-            return new StepValidationResult
-            {
-                IsValid = false,
-                ErrorMessage = $"输出不等于期望值: {expectedValue}"
-            };
-        }
-
-        if (expectedPattern.StartsWith("regex:", StringComparison.OrdinalIgnoreCase))
-        {
-            var pattern = expectedPattern.Substring("regex:".Length);
-            if (Regex.IsMatch(actualOutput, pattern, RegexOptions.IgnoreCase))
-            {
-                return new StepValidationResult { IsValid = true };
-            }
-
-            return new StepValidationResult
-            {
-                IsValid = false,
-                ErrorMessage = $"输出不匹配正则表达式: {pattern}"
-            };
-        }
-
-        if (actualOutput.Contains(expectedPattern, StringComparison.OrdinalIgnoreCase))
+        if (ExpectedResultMatcher.Match(expectedPattern, actualOutput, out var reason))
         {
             return new StepValidationResult { IsValid = true };
         }
@@ -472,7 +417,9 @@ public sealed class ConfigDrivenTestEngine : IStepExecutionService, IDisposable
         return new StepValidationResult
         {
             IsValid = false,
-            ErrorMessage = $"输出不包含期望值: {expectedPattern}"
+            ErrorMessage = string.IsNullOrEmpty(reason)
+                ? $"输出不匹配期望值: {expectedPattern}"
+                : reason
         };
     }
 
