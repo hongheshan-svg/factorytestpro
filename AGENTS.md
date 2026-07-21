@@ -1,25 +1,28 @@
 # Project Guidelines
 
 ## Project Structure
-- `UniversalTestFramework.sln` is a .NET 10 solution for a Windows-only WPF test platform.
-- Main projects: `UTF.HAL`, `UTF.Logging`, `UTF.Configuration`, `UTF.Core`, `UTF.Plugin.Abstractions`, `UTF.Plugin.Host`, `UTF.Business`, `UTF.Reporting`, `UTF.Vision`, `UTF.UI`, `UTF.Plugins.Drivers`, `UTF.Plugins.Example`, `tests/UTF.Core.Tests`, `tests/UTF.Business.Tests`, `tests/UTF.Configuration.Tests`, `tests/UTF.Plugin.Host.Tests`, `tests/UTF.Reporting.Tests`, `tests/UTF.UI.Tests`.
+- `UniversalTestFramework.sln` is a .NET 10 solution for a Windows-only WPF test platform plus a headless CLI.
+- Main projects: `UTF.HAL`, `UTF.Logging`, `UTF.Configuration`, `UTF.Core`, `UTF.Plugin.Abstractions`, `UTF.Plugin.Host`, `UTF.Business`, `UTF.Reporting`, `UTF.Vision`, `UTF.UI`, `UTF.CLI`, `UTF.Plugins.Drivers`, `UTF.Plugins.Example`, `tests/UTF.Core.Tests`, `tests/UTF.Business.Tests`, `tests/UTF.Configuration.Tests`, `tests/UTF.Plugin.Host.Tests`, `tests/UTF.Reporting.Tests`, `tests/UTF.UI.Tests`.
 - `UTF.UI` is the desktop entry point (`net10.0-windows`). Startup and DI composition live in `UTF.UI/App.xaml.cs`.
+- `UTF.CLI` (`utf-run`, `net10.0`) is the headless entry point — no WPF. See `UTF.CLI/README.md`.
 - Runtime configuration is centered on `config/unified-config.json`. Example and user data live under `Data/` and `UTF.UI/Data/`.
 - Do not edit generated outputs in `bin/`, `obj/`, or runtime logs under `UTF.UI/bin/**/logs/` unless the task explicitly targets build artifacts.
 
 ## Architecture
 - Keep business and execution logic out of the UI layer. Prefer placing reusable logic in `UTF.Core` or `UTF.Business`; `UTF.UI` should orchestrate windows, binding, and service wiring.
-- **Production UI path today**: `config/unified-config.json` -> `UTF.UI.Services.ConfigurationManager` -> `UTF.UI.Services.DUTMonitorManager` -> `ConfigDrivenTestEngine`.
-- **Core session API**: `ConfigDrivenTestOrchestrator` is registered in DI and is the preferred headless/shared-session orchestrator; the desktop UI is **not** fully on it yet (Phase B migration).
-- Do **not** invent a dual-engine story: `OptimizedTestEngine` / `ITestEngine` were deleted. Step execution is `ConfigDrivenTestEngine` (also `IStepExecutionService`).
+- Configuration-driven execution is the default flow (single engine: `ConfigDrivenTestEngine` / `IStepExecutionService`; no dual-engine / `ITestEngine`):
+  - **UI**: `config/unified-config.json` -> `UTF.UI.Services.ConfigurationManager` -> `DUTMonitorManager` (UI projection) -> `ConfigDrivenTestOrchestrator` -> `ConfigDrivenTestEngine`
+  - **Headless**: `config/unified-config.json` -> `UTF.Core.Configuration.FileUnifiedConfigurationService` -> `ConfigDrivenTestOrchestrator.CreateSessionAsync(ConfigTestProject, ...)` -> `ConfigDrivenTestEngine`
 - Result validation MUST use `UTF.Plugin.Abstractions.ExpectedResultMatcher` (re-exported as `UTF.Core.Validation.ExpectedResultMatcher`). Engines and plugins must not re-parse `contains:`/`equals:`/`regex:`/`notcontains:` inline.
 - Plugin-based step execution goes through `UTF.Plugin.Host.StepExecutorPluginHost` and `IPluginService`. Plugin manifests are discovered from `plugins/<pluginId>/<version>/plugin.manifest.json` after build packaging.
+- HAL device communication is plugin-oriented (`UTF.Plugins.Drivers`). Legacy `DUTCommunicationHelper` was removed (Phase C); remaining `IDevice`/`IDUT` types are obsolete but still used by `DeviceManager`.
 - Dependency injection patterns are defined in `UTF.Core/DependencyInjection/ServiceCollectionExtensions.cs`, `UTF.Configuration/ServiceCollectionExtensions.cs`, and `UTF.UI/DependencyInjection/ServiceCollectionExtensions.cs`.
 - Good reference files:
   - `UTF.UI/App.xaml.cs` for startup, DI, and crash handling
-  - `UTF.UI/Services/DUTMonitorManager.cs` for the current production desktop test-run entry
+  - `UTF.UI/Services/DUTMonitorManager.cs` for desktop DUT monitor (projects orchestrator events to UI)
   - `UTF.Core/ConfigDrivenTestEngine.cs` for step execution behavior
-  - `UTF.Core/ConfigDrivenTestOrchestrator.cs` for preferred session orchestration and concurrency
+  - `UTF.Core/ConfigDrivenTestOrchestrator.cs` for session orchestration and concurrency
+  - `UTF.CLI/Program.cs` for headless entry
   - `UTF.Plugin.Host/StepExecutorPluginHost.cs` for plugin loading and dispatch (SHA-256 mandatory, path-traversal guarded)
   - `UTF.Plugin.Abstractions/ExpectedResultMatcher.cs` for the single source of truth on `contains:`/`equals:`/`regex:`/`notcontains:` result validation
   - `tests/UTF.Core.Tests/ConfigDrivenTestEngineTests.cs` for xUnit test style
@@ -32,9 +35,17 @@
 - Run the UI:
   - `dotnet run --project UTF.UI/UTF.UI.csproj -c Debug`
   - In VS Code, prefer the existing task `Run UTF.UI` when you need the app running.
+- Run headless CLI (`utf-run`):
+  - `dotnet run --project UTF.CLI -- --help`
+  - `dotnet run --project UTF.CLI -- --config config/unified-config.json --dut-count 2 --operator cli`
+  - With packed plugins (after UI build):  
+    `dotnet run --project UTF.CLI -- --config config --duts DUT-1,DUT-2 --plugins UTF.UI/bin/Debug/net10.0-windows/plugins`
+  - Exit codes: `0` all pass, `1` fail, `2` config/init error.
+  - Phase C limits: no full PDF reports; vision still simulated; real I/O needs plugins or `Parameters.MockOutput`.
 - Tests:
   - `dotnet test UniversalTestFramework.sln`
   - `dotnet test tests/UTF.Core.Tests/UTF.Core.Tests.csproj --logger "console;verbosity=detailed"`
+  - Stability suite: `tests/UTF.Core.Tests/StabilityTests.cs` (multi-DUT mock parallel, cancellation, plugin unload).
 - CI: `.github/workflows/ci.yml` runs restore/build/test on `windows-latest` for pushes and PRs to `main`. Plugin loading tests set the `UTFF_ALLOW_UNSIGNED_PLUGINS=1` env var to admit test fixtures without `sha256`; production never sets this.
 - Validation scripts:
   - `./verify-migration.sh`

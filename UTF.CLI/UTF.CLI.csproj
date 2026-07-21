@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>utf-run</AssemblyName>
+    <RootNamespace>UTF.CLI</RootNamespace>
+    <Description>Headless CLI runner for Universal Test Framework (Phase C productization slice)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\UTF.Core\UTF.Core.csproj" />
+    <ProjectReference Include="..\UTF.Logging\UTF.Logging.csproj" />
+    <ProjectReference Include="..\UTF.Plugin.Host\UTF.Plugin.Host.csproj" />
+    <ProjectReference Include="..\UTF.Plugin.Abstractions\UTF.Plugin.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\config\unified-config.json" Link="config\unified-config.json" Condition="Exists('..\config\unified-config.json')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

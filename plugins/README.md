@@ -29,8 +29,11 @@ plugins/utf.executor.cmd/1.0.0/plugin.manifest.json
 
 ## 加载入口
 运行时由 `UTF.Plugin.Host.StepExecutorPluginHost` 扫描并加载：
-- 扫描路径：`<UTF.UI.exe目录>/plugins/<pluginId>/<version>/plugin.manifest.json`（仅扫描两层固定结构，不再递归任意深度）
+- 扫描路径：`<app>/plugins/<pluginId>/<version>/plugin.manifest.json`（仅扫描两层固定结构，不再递归任意深度）
+  - UI 默认：`<UTF.UI.exe目录>/plugins/...`
+  - Headless CLI：`--plugins <dir>`（默认 `utf-run` 旁 `plugins/`；可指向 UI 构建输出）
 - 载入顺序：按 `priority`（小优先）
+- 通信路径：步骤 I/O 经插件（`UTF.Plugins.Drivers` / `UTF.Plugins.Example`），不再经已删除的 `DUTCommunicationHelper`
 
 ## 打包方式
 ### 自动打包（推荐）
