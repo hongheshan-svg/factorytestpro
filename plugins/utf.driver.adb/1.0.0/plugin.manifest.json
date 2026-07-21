@@ -12,5 +12,10 @@
   "frameworkVersion": "net10.0",
   "settings": {
     "AdbPath": "adb"
-  }
+  },
+  "parameterSchema": [
+    { "name": "AdbPath", "type": "string", "label": "ADB executable path", "default": "adb" },
+    { "name": "Serial", "type": "string", "label": "Device serial (-s)", "required": false },
+    { "name": "Transport", "type": "string", "label": "Transport", "default": "usb", "enumValues": ["usb", "tcp", "any"] }
+  ]
 }

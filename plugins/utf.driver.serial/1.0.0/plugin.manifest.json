@@ -17,5 +17,14 @@
     "Parity": "None",
     "ReadTimeoutMs": "2000",
     "LineEnding": "\\r\\n"
-  }
+  },
+  "parameterSchema": [
+    { "name": "SerialPort", "type": "string", "label": "Serial port", "required": true },
+    { "name": "BaudRate", "type": "int", "label": "Baud rate", "default": "115200" },
+    { "name": "DataBits", "type": "int", "label": "Data bits", "default": "8", "enumValues": ["7", "8"] },
+    { "name": "StopBits", "type": "string", "label": "Stop bits", "default": "One", "enumValues": ["One", "Two", "OnePointFive"] },
+    { "name": "Parity", "type": "string", "label": "Parity", "default": "None", "enumValues": ["None", "Odd", "Even", "Mark", "Space"] },
+    { "name": "ReadTimeoutMs", "type": "int", "label": "Read timeout (ms)", "default": "2000" },
+    { "name": "LineEnding", "type": "string", "label": "Line ending", "default": "\\r\\n", "enumValues": ["\\r\\n", "\\n", "\\r"] }
+  ]
 }

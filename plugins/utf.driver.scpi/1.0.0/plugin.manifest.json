@@ -14,5 +14,11 @@
     "Port": "5025",
     "ReadTimeoutMs": "5000",
     "LineEnding": "\\n"
-  }
+  },
+  "parameterSchema": [
+    { "name": "Resource", "type": "string", "label": "VISA / resource string", "required": true },
+    { "name": "Port", "type": "int", "label": "TCP port (LXI)", "default": "5025" },
+    { "name": "ReadTimeoutMs", "type": "int", "label": "Read timeout (ms)", "default": "5000" },
+    { "name": "LineEnding", "type": "string", "label": "Line ending", "default": "\\n", "enumValues": ["\\n", "\\r\\n", "\\r"] }
+  ]
 }

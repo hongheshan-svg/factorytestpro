@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using UTF.Configuration;
+using UTF.Core;
 using UTF.UI.Models;
 using UTF.UI.Services;
 
@@ -22,15 +23,18 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     private readonly ConfigurationManager _configManager;
     private readonly IConfigurationAdapter _configAdapter;
     private readonly IDialogService _dialogService;
+    private readonly IPluginCapabilityService? _pluginCapabilities;
 
     public ConfigurationCenterViewModel(
         ConfigurationManager configManager,
         IConfigurationAdapter configAdapter,
-        IDialogService dialogService)
+        IDialogService dialogService,
+        IPluginCapabilityService? pluginCapabilities = null)
     {
         _configManager = configManager ?? throw new ArgumentNullException(nameof(configManager));
         _configAdapter = configAdapter ?? throw new ArgumentNullException(nameof(configAdapter));
         _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
+        _pluginCapabilities = pluginCapabilities;
         _config = new UnifiedConfiguration();
         EnsureNestedObjects(_config);
     }
@@ -122,8 +126,19 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     private int? _selectedStepMaxRetries;
 
     /// <summary>
+    /// Dynamic plugin parameter fields for the selected step (from <c>parameterSchema</c>).
+    /// Empty when no matching plugin or schema is absent.
+    /// </summary>
+    public ObservableCollection<StepParameterFieldViewModel> DynamicParameterFields { get; } = new();
+
+    /// <summary>
+    /// Whether the dynamic parameter panel should be shown (schema fields present).
+    /// </summary>
+    public bool HasDynamicParameterFields => DynamicParameterFields.Count > 0;
+
+    /// <summary>
     /// CommunityToolkit 生成的 <c>SelectedStep</c> setter 的 partial 钩子。
-    /// 在选中步骤变化时同步 <see cref="SelectedStepMaxRetries"/> 与详情面板可见性。
+    /// 在选中步骤变化时同步 <see cref="SelectedStepMaxRetries"/> 与动态参数面板。
     /// </summary>
     partial void OnSelectedStepChanged(TestStepConfig? value)
     {
@@ -143,6 +158,8 @@ public partial class ConfigurationCenterViewModel : ObservableObject
         {
             SelectedStepMaxRetries = null;
         }
+
+        RebuildDynamicParameterFields();
     }
 
     /// <summary>
@@ -171,6 +188,56 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Commit dynamic parameter editors and MaxRetries into <see cref="SelectedStep"/>.Parameters.
+    /// Unknown keys not in the schema are left untouched.
+    /// </summary>
+    public void ApplyDynamicParameters()
+    {
+        ApplyStepMaxRetries();
+        foreach (var field in DynamicParameterFields)
+        {
+            field.Commit();
+        }
+    }
+
+    /// <summary>
+    /// Rebuild <see cref="DynamicParameterFields"/> from the matching plugin
+    /// <c>parameterSchema</c> for the selected step's Type/Channel.
+    /// Call after Type or Channel changes (window code-behind hooks ComboBox).
+    /// </summary>
+    public void RebuildDynamicParameterFields()
+    {
+        // Persist current field values before rebuilding so Type/Channel edits don't drop edits.
+        foreach (var field in DynamicParameterFields)
+        {
+            field.Commit();
+        }
+
+        DynamicParameterFields.Clear();
+
+        var step = SelectedStep;
+        if (step is null || _pluginCapabilities is null)
+        {
+            OnPropertyChanged(nameof(HasDynamicParameterFields));
+            return;
+        }
+
+        step.Parameters ??= new Dictionary<string, object>();
+        var schema = _pluginCapabilities.GetParameterSchema(step.Type, step.Channel);
+        foreach (var item in schema)
+        {
+            if (string.IsNullOrWhiteSpace(item.Name))
+            {
+                continue;
+            }
+
+            DynamicParameterFields.Add(new StepParameterFieldViewModel(item, step.Parameters));
+        }
+
+        OnPropertyChanged(nameof(HasDynamicParameterFields));
+    }
+
+    /// <summary>
     /// 提示 DataGrid 刷新行显示。由于 <see cref="TestStepConfig"/> 不实现 INPC，
     /// TwoWay 绑定直接回写属性时 DataGrid 不会自动重绘当前行文本；
     /// 此命令由详情面板"刷新"按钮触发，调用方（ConfigurationCenterWindow.xaml.cs）
@@ -181,7 +248,8 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     {
         // 实际刷新由 ConfigurationCenterWindow 代码后置订阅本命令的 CanExecuteChanged/调用执行；
         // 此处仅触发一次属性变更以驱动绑定更新。
-        ApplyStepMaxRetries();
+        ApplyDynamicParameters();
+        RebuildDynamicParameterFields();
         OnPropertyChanged(nameof(TestSteps));
     }
 
@@ -383,6 +451,7 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     public IReadOnlyList<string> Validate(UnifiedConfiguration? config = null)
     {
         // 先将 UI 集合写回 Config，确保校验基于最新输入。
+        ApplyDynamicParameters();
         SyncToConfig();
         var target = config ?? Config;
         var errors = _configAdapter.ValidateConfigurationWithErrors(target);
@@ -409,6 +478,7 @@ public partial class ConfigurationCenterViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveAsync()
     {
+        ApplyDynamicParameters();
         SyncToConfig();
         var errors = _configAdapter.ValidateConfigurationWithErrors(Config);
         if (errors is null || errors.Count > 0)
@@ -664,7 +734,10 @@ public partial class ConfigurationCenterViewModel : ObservableObject
                 Expected = step.Expected,
                 Timeout = step.Timeout,
                 Delay = step.Delay,
-                ContinueOnFailure = step.ContinueOnFailure
+                ContinueOnFailure = step.ContinueOnFailure,
+                Parameters = step.Parameters is null
+                    ? null
+                    : new Dictionary<string, object>(step.Parameters)
             };
             TestSteps.Add(copy);
             SelectedStep = copy;

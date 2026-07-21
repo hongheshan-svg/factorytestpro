@@ -26,6 +26,24 @@ plugins/utf.executor.cmd/1.0.0/plugin.manifest.json
 - `entryType`：入口类型全名，必须实现 `IStepExecutorPlugin`，且须为带命名空间的全限定名。
 - `priority`：非负整数，数值越小优先级越高（同类型+通道下取最低值）。
 - `sha256`：**必填**。入口程序集的 SHA-256 哈希（大写十六进制字符串）。生产环境加载插件时会强制校验，缺失或不匹配抛出 `PLG002`。本地开发或测试场景若需加载未签名夹具，可设置环境变量 `UTFF_ALLOW_UNSIGNED_PLUGINS=1` 放行（仅限测试/开发，生产禁用）。
+- `parameterSchema`（可选）：步骤参数表单描述数组。缺省时配置中心不显示动态参数面板（向后兼容）。每项字段：
+  - `name`（必填）：写入 `step.Parameters` 的键
+  - `type`：`string` | `int` | `bool` | `double`（默认 `string`）
+  - `label`：UI 标签（缺省用 `name`）
+  - `default`：字符串形式的默认值
+  - `required`：是否必填
+  - `enumValues`：可选固定选项（UI 使用 ComboBox）
+
+  示例：
+
+  ```json
+  "parameterSchema": [
+    { "name": "BaudRate", "type": "int", "label": "Baud rate", "default": "115200" },
+    { "name": "SerialPort", "type": "string", "label": "Port", "required": true }
+  ]
+  ```
+
+  加载时合并到 `PluginMetadata.ParameterSchema`；配置中心通过 `IPluginCapabilityService.GetParameterSchema(stepType, channel)` 查询（同类型+通道取 priority 最低的插件）。
 
 ## 加载入口
 运行时由 `UTF.Plugin.Host.StepExecutorPluginHost` 扫描并加载：

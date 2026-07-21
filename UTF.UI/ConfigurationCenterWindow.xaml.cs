@@ -149,6 +149,32 @@ namespace UTF.UI
         // 面板可见性由 NullToVisibilityConverter（绑定 SelectedStep）自动控制。
         // 由于 TestStepConfig 未实现 INPC，"刷新列表"按钮触发 VM 的 RefreshStepsCommand
         // 同步 SelectedStepMaxRetries 回写 + 提示 UI 重绘（仍需 CollectionView 重置或 Items.Refresh）。
+        // Type/Channel 变更时重建插件 parameterSchema 动态参数表单（P4）。
+
+        private void DetailTypeOrChannel_LostFocus(object sender, RoutedEventArgs e)
+            => RebuildDynamicParametersFromCombos();
+
+        private void DetailTypeOrChannel_SelectionChanged(object sender, SelectionChangedEventArgs e)
+            => RebuildDynamicParametersFromCombos();
+
+        private void RebuildDynamicParametersFromCombos()
+        {
+            // Push ComboBox Text into SelectedStep first (editable ComboBox may lag Source).
+            if (_viewModel.SelectedStep is { } step)
+            {
+                if (DetailTypeCombo is not null)
+                {
+                    step.Type = DetailTypeCombo.Text?.Trim() ?? step.Type;
+                }
+
+                if (DetailChannelCombo is not null)
+                {
+                    step.Channel = DetailChannelCombo.Text?.Trim() ?? step.Channel;
+                }
+            }
+
+            _viewModel.RebuildDynamicParameterFields();
+        }
 
         private void Cancel_Click(object sender, RoutedEventArgs e) => Close();
     }

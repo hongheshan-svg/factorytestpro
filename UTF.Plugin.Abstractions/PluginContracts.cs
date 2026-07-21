@@ -30,6 +30,28 @@ public enum StepExecutionStatus
     Skipped = 4
 }
 
+/// <summary>
+/// Declares a single plugin step parameter for UI forms and validation.
+/// Types: <c>string</c>, <c>int</c>, <c>bool</c>, <c>double</c>.
+/// Optional; absent schema means no dynamic parameter panel.
+/// </summary>
+public sealed class PluginParameterSchemaItem
+{
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Parameter value type: string | int | bool | double.</summary>
+    public string Type { get; set; } = "string";
+
+    public string? Label { get; set; }
+
+    public string? Default { get; set; }
+
+    public bool Required { get; set; }
+
+    /// <summary>When set, UI should present a fixed-choice editor (ComboBox).</summary>
+    public string[]? EnumValues { get; set; }
+}
+
 public sealed record PluginMetadata
 {
     public string PluginId { get; init; } = string.Empty;
@@ -39,6 +61,13 @@ public sealed record PluginMetadata
     public IReadOnlyList<string> SupportedStepTypes { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> SupportedChannels { get; init; } = Array.Empty<string>();
     public int Priority { get; init; } = 100;
+
+    /// <summary>
+    /// Optional parameter schema from the plugin manifest (or plugin code).
+    /// Used by Configuration Center to build a dynamic step-parameter form.
+    /// </summary>
+    public IReadOnlyList<PluginParameterSchemaItem> ParameterSchema { get; init; } =
+        Array.Empty<PluginParameterSchemaItem>();
 }
 
 public sealed record PluginArtifact

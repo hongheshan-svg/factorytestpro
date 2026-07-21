@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using UTF.Plugin.Abstractions;
 
 namespace UTF.Plugin.Host;
 
@@ -42,4 +43,11 @@ public sealed class PluginManifest
 
     [JsonPropertyName("settings")]
     public Dictionary<string, string> Settings { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Optional step-parameter schema for dynamic Configuration Center forms.
+    /// Absent or null is valid (backward compatible).
+    /// </summary>
+    [JsonPropertyName("parameterSchema")]
+    public List<PluginParameterSchemaItem>? ParameterSchema { get; set; }
 }

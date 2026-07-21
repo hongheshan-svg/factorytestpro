@@ -667,6 +667,13 @@ public sealed class StepExecutorPluginHost : IDisposable, IAsyncDisposable
 
     private static PluginMetadata MergeMetadata(PluginMetadata metadata, PluginManifest manifest)
     {
+        // Prefer plugin-code schema when present; otherwise take optional manifest schema.
+        IReadOnlyList<PluginParameterSchemaItem> parameterSchema =
+            metadata.ParameterSchema.Count > 0
+                ? metadata.ParameterSchema
+                : (IReadOnlyList<PluginParameterSchemaItem>?)manifest.ParameterSchema
+                  ?? Array.Empty<PluginParameterSchemaItem>();
+
         return metadata with
         {
             PluginId = string.IsNullOrWhiteSpace(metadata.PluginId) ? manifest.PluginId : metadata.PluginId,
@@ -681,7 +688,8 @@ public sealed class StepExecutorPluginHost : IDisposable, IAsyncDisposable
             SupportedChannels = metadata.SupportedChannels.Count > 0
                 ? metadata.SupportedChannels
                 : manifest.SupportedChannels,
-            Priority = manifest.Priority
+            Priority = manifest.Priority,
+            ParameterSchema = parameterSchema
         };
     }
 

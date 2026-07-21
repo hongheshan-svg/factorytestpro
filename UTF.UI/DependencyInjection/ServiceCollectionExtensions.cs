@@ -45,6 +45,13 @@ public static class ServiceCollectionExtensions
             return new UTF.Plugin.Host.PluginServiceAdapter(pluginHost);
         });
 
+        // Plugin capability queries (step types / channels / parameterSchema) for Configuration Center
+        services.AddSingleton<IPluginCapabilityService>(sp =>
+        {
+            var pluginHost = sp.GetRequiredService<UTF.Plugin.Host.StepExecutorPluginHost>();
+            return new UTF.Plugin.Host.PluginCapabilityService(pluginHost);
+        });
+
         services.AddSingleton<UTF.UI.Services.ConfigurationManager>(sp =>
             new UTF.UI.Services.ConfigurationManager(
                 sp.GetRequiredService<UTF.Configuration.IUnifiedConfigurationAdapter>()));

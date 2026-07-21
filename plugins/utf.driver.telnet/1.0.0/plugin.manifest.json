@@ -16,5 +16,13 @@
     "LineEnding": "\\r\\n",
     "PromptPattern": ">",
     "Encoding": "utf8"
-  }
+  },
+  "parameterSchema": [
+    { "name": "Host", "type": "string", "label": "Host / IP", "required": true },
+    { "name": "Port", "type": "int", "label": "Port", "default": "23" },
+    { "name": "ReadTimeoutMs", "type": "int", "label": "Read timeout (ms)", "default": "3000" },
+    { "name": "PromptPattern", "type": "string", "label": "Prompt pattern", "default": ">" },
+    { "name": "Encoding", "type": "string", "label": "Encoding", "default": "utf8", "enumValues": ["utf8", "ascii", "unicode"] },
+    { "name": "LineEnding", "type": "string", "label": "Line ending", "default": "\\r\\n", "enumValues": ["\\r\\n", "\\n", "\\r"] }
+  ]
 }

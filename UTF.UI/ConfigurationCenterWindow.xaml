@@ -9,6 +9,7 @@
     <Window.Resources>
         <converters:StringToNullableIntConverter x:Key="NullableIntConverter"/>
         <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <Style x:Key="ActionButton" TargetType="Button">
             <Setter Property="Background" Value="#007ACC"/>
             <Setter Property="Foreground" Value="White"/>
@@ -468,14 +469,18 @@
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="类型:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
                                 <ComboBox Grid.Row="1" Grid.Column="1" x:Name="DetailTypeCombo" Margin="0,8,10,8" IsEditable="True"
-                                          Text="{Binding SelectedStep.Type, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                                          Text="{Binding SelectedStep.Type, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          LostFocus="DetailTypeOrChannel_LostFocus"
+                                          SelectionChanged="DetailTypeOrChannel_SelectionChanged">
                                     <ComboBoxItem Content="serial"/>
                                     <ComboBoxItem Content="custom"/>
                                     <ComboBoxItem Content="instrument"/>
                                 </ComboBox>
                                 <TextBlock Grid.Row="1" Grid.Column="2" Text="通道:" Style="{StaticResource FieldLabel}" Margin="0,8,0,4"/>
                                 <ComboBox Grid.Row="1" Grid.Column="3" x:Name="DetailChannelCombo" Margin="0,8,0,8" IsEditable="True"
-                                          Text="{Binding SelectedStep.Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                                          Text="{Binding SelectedStep.Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          LostFocus="DetailTypeOrChannel_LostFocus"
+                                          SelectionChanged="DetailTypeOrChannel_SelectionChanged">
                                     <ComboBoxItem Content="Serial"/>
                                     <ComboBoxItem Content="Cmd"/>
                                     <ComboBoxItem Content="Telnet"/>
@@ -515,6 +520,42 @@
                                           Content="失败后继续执行" Margin="0,10,0,0" VerticalAlignment="Center"
                                           IsChecked="{Binding SelectedStep.ContinueOnFailure, Mode=TwoWay}"/>
                             </Grid>
+
+                            <!-- Plugin parameterSchema dynamic form (P4) -->
+                            <StackPanel Margin="0,14,0,0"
+                                        Visibility="{Binding HasDynamicParameterFields, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock Text="插件参数 (parameterSchema)" FontSize="12" FontWeight="SemiBold"
+                                           Foreground="#2C3E50" Margin="0,0,0,8"/>
+                                <ItemsControl ItemsSource="{Binding DynamicParameterFields}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="140"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" VerticalAlignment="Center" Style="{StaticResource FieldLabel}"
+                                                           Text="{Binding Label}" Margin="0,0,8,0"/>
+                                                <!-- Text editor -->
+                                                <TextBox Grid.Column="1" Style="{StaticResource ModernTextBox}"
+                                                         Visibility="{Binding IsText, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                         Text="{Binding StringValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                                <!-- Enum editor -->
+                                                <ComboBox Grid.Column="1" IsEditable="True"
+                                                          Visibility="{Binding IsEnum, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                          ItemsSource="{Binding EnumValues}"
+                                                          Text="{Binding StringValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                                <!-- Bool editor -->
+                                                <CheckBox Grid.Column="1" VerticalAlignment="Center"
+                                                          Visibility="{Binding IsBool, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                          IsChecked="{Binding BoolValue, Mode=TwoWay}"
+                                                          Content="启用"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
                             <Button Content="🔄 刷新列表" Style="{StaticResource ActionButton}" Background="#007ACC"
                                     HorizontalAlignment="Right" Margin="0,10,0,0" Command="{Binding RefreshStepsCommand}"/>
                         </StackPanel>

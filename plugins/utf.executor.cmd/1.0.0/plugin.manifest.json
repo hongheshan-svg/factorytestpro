@@ -17,5 +17,11 @@
   ],
   "priority": 100,
   "publisher": "UTF",
-  "frameworkVersion": "net10.0"
+  "frameworkVersion": "net10.0",
+  "parameterSchema": [
+    { "name": "WorkingDirectory", "type": "string", "label": "Working directory" },
+    { "name": "Shell", "type": "string", "label": "Shell", "default": "cmd", "enumValues": ["cmd", "powershell"] },
+    { "name": "UseShellExecute", "type": "bool", "label": "Use shell execute", "default": "false" },
+    { "name": "MockOutput", "type": "string", "label": "Mock output (test)" }
+  ]
 }
