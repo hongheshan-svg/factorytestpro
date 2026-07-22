@@ -671,7 +671,7 @@ public sealed class DUTMonitorManager : IDUTMonitorService, IDisposable
         // Honour UiProfile.ShowStepColumns property (set from MainWindow / config).
         if (!ShowStepColumns)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         var steps = DUTItems.FirstOrDefault()?.TestSteps ?? new ObservableCollection<DUTTestStep>();

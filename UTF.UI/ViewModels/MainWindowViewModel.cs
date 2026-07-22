@@ -498,10 +498,6 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private string _monitorTitleText = "🎛️ DUT监控台";
 
-    /// <summary>Whether dynamic step columns should be shown (UiProfile.ShowStepColumns).</summary>
-    [ObservableProperty]
-    private bool _showStepColumns = true;
-
     /// <summary>
     /// Snapshot of the active profile (for diagnostics / tests). Never null after construction.
     /// </summary>
@@ -583,9 +579,15 @@ public partial class MainWindowViewModel : ObservableObject
         // Profile wants full chrome only when both edit + advanced menus are enabled.
         var profileAllowsEngineering = profile.AllowConfigEdit && profile.ShowAdvancedMenus;
         var hasSystemConfig = _permissionManager.HasPermission(Permission.SystemConfig);
+        // Engineers with plan rights (but no SystemConfig) still need the engineering shell
+        // for template packs / plan editors.
+        var hasEngineeringPermission = hasSystemConfig
+            || _permissionManager.HasPermission(Permission.TestPlanManagement)
+            || _permissionManager.HasPermission(Permission.TestPlanCreate)
+            || _permissionManager.HasPermission(Permission.TestPlanEdit);
 
-        // Hide engineering shell when: profile denies edit, no SystemConfig, or restricted role.
-        ShowEngineeringMenus = profileAllowsEngineering && hasSystemConfig && !isRestrictedRole;
+        // Hide engineering shell when: profile denies edit, no engineering permission, or restricted role.
+        ShowEngineeringMenus = profileAllowsEngineering && hasEngineeringPermission && !isRestrictedRole;
         ShowOperatorChrome = !ShowEngineeringMenus;
 
         if (!ShowEngineeringMenus)
