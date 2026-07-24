@@ -17,7 +17,8 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.x'
+          # Must match global.json sdk.version (rollForward latestPatch only accepts >= that patch band)
+          dotnet-version: '10.0.110'
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
@@ -60,8 +61,8 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          # Pin major line; patch floats so SDK security updates land without workflow churn
-          dotnet-version: '10.0.x'
+          # Must match global.json sdk.version
+          dotnet-version: '10.0.110'
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
