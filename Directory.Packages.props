@@ -30,7 +30,7 @@
     <PackageVersion Include="System.Drawing.Common" Version="10.0.0" />
 
     <!-- MVVM toolkit -->
-    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 
     <!-- PDF generation -->
     <PackageVersion Include="QuestPDF" Version="2026.7.1" />
