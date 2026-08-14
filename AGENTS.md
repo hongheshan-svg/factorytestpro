@@ -73,6 +73,7 @@
 - See `docs/migration-guide.md` for config-driven migration guidance.
 - See `docs/completeness-check.md` and `docs/implementation-complete.md` for verification status and implemented scope.
 - See `docs/architecture-optimization-report.md` for architecture background and prior design decisions.
+- See `docs/ui-generalization-guide.md` for UI P0–P5 (plugin-driven forms, packs, UiProfile, endpoints, workbenches).
 
 ## Agent Guidance
 - Prefer editing source files over generated assets.

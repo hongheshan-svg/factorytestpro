@@ -26,14 +26,17 @@
 ### 使用与接入
 
 - [工厂用户使用手册](factory-user-guide.md)
+- [UI 通用化使用说明（P0–P5）](ui-generalization-guide.md)
 - [配置文件说明](../config/README.md)
 - [模板库说明](../config/templates/README.md)
 - [快速上手配置模板](../config/templates/factory-quick-start-minimal.json)
+- [无头 CLI（utf-run）](../UTF.CLI/README.md)
 
 ### 架构与迁移
 
 - [迁移指南](migration-guide.md)
 - [架构优化报告](architecture-optimization-report.md)
+- [UI 通用化使用说明](ui-generalization-guide.md)
 - [完成度检查（历史快照，pre-2026-07）](completeness-check.md)
 - [实现完成说明](implementation-complete.md)
 
@@ -54,8 +57,8 @@
 ### 第一次导入到工厂
 
 1. 阅读 [工厂用户使用手册](factory-user-guide.md)
-2. 复制 [快速上手最小配置模板](../config/templates/factory-quick-start-minimal.json)
-3. 对照 [配置文件说明](../config/README.md) 修改产品信息、连接信息和测试步骤
+2. 用 UI **配置 → 选择工艺包/模板…** 应用 [快速上手最小配置模板](../config/templates/factory-quick-start-minimal.json)，或手动复制该文件
+3. 对照 [配置文件说明](../config/README.md) 与 [UI 通用化说明](ui-generalization-guide.md) 修改产品信息、端点与测试步骤
 
 ### 第一次扩展插件或测试能力
 

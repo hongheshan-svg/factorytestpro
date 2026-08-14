@@ -21,13 +21,14 @@
 - 列表扫描本目录 `*.json`（运行时来自 `BaseDirectory/config/templates`，构建时由 `UTF.UI.csproj` 从仓库 `config/` 复制）。
 - 预览产品名称与步骤数后点 **应用选中模板**；确认后会替换当前 `unified-config.json`，并在同目录生成 `unified-config.backup.<时间戳>.json`。
 - 应用成功后主界面刷新 DUT 监控与产品型号。
+- 完整说明（工作台 / 端点 / UiProfile / 动态参数）：[docs/ui-generalization-guide.md](../../docs/ui-generalization-guide.md)
 
 ### 手动复制
 
 1. 将模板复制到 `config/unified-config.json`
 2. 修改 `DUTConfiguration.ProductInfo` 为实际产品信息
-3. 修改 `CommunicationEndpoints` 为实际串口/网络地址
-4. 修改各步骤的 `Parameters.InstrumentAddress` 为实际仪器地址
+3. 修改 `Endpoints` 或 `CommunicationEndpoints` 为实际串口/网络地址
+4. 修改各步骤的 `Parameters`（或仪器地址等）为实际值
 5. 调整 `ValidationRules.NumericRange` 为实际测试规格
 
 如果你是第一次接入本平台，建议先使用 `factory-quick-start-minimal.json` 跑通最小链路，再切换到更完整的行业模板。
